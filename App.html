@@ -1,6 +1,6 @@
 <script>
 /* =====================================================================
- * Hotel Management — client app (runs in the browser)
+ * GRS Hotel — client app (runs in the browser)
  * ===================================================================== */
 var S = { token: null, user: null, settings: {}, lists: {}, room_types: [], route: 'dashboard', params: {} };
 var $ = function (id) { return document.getElementById(id); };
@@ -62,10 +62,36 @@ function showLogin(msg) {
   var e = $('login-error'); if (msg) { e.textContent = msg; e.classList.remove('hidden'); } else e.classList.add('hidden');
 }
 $('login-form').addEventListener('submit', function (ev) {
-  ev.preventDefault(); var f = ev.target; submitting(f, true);
-  call('login', formData(f)).then(function (r) { S.token = r.token; store('hm_token', r.token); f.reset(); boot(); })
-    .catch(function (e) { showLogin(e.message); }).then(function () { submitting(f, false); });
+  ev.preventDefault(); var f = ev.target, btn = f.querySelector('.login-btn'), d = formData(f);
+  if (!d.email || !d.password) { showLogin('Please enter your email and password.'); shake(f); return; }
+  submitting(f, true); btn.classList.add('busy');
+  call('login', d).then(function (r) { S.token = r.token; store('hm_token', r.token); f.reset(); boot(); })
+    .catch(function (e) { showLogin(e.message); shake(f); })
+    .then(function () { submitting(f, false); btn.classList.remove('busy'); });
 });
+function shake(el) { el.classList.remove('shake'); void el.offsetWidth; el.classList.add('shake'); }
+$('lg-eye').addEventListener('click', function () {
+  var p = $('lg-pass'), show = p.type === 'password'; p.type = show ? 'text' : 'password';
+  this.classList.toggle('on', show); this.title = show ? 'Hide password' : 'Show password'; p.focus();
+});
+['keydown', 'keyup'].forEach(function (t) { $('lg-pass').addEventListener(t, function (e) {
+  if (e.getModifierState) $('caps-warn').classList.toggle('hidden', !e.getModifierState('CapsLock'));
+}); });
+$('yr').textContent = new Date().getFullYear();
+
+// ------------------------------------------------------------- GRS logo (inline SVG)
+function grsLogoSvg() {
+  return '<svg viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="GRS Hotel">' +
+    '<circle cx="60" cy="60" r="57" fill="#fff"/>' +
+    '<circle cx="60" cy="60" r="52" fill="#dc2626"/>' +
+    '<circle cx="60" cy="60" r="45" fill="none" stroke="#fff" stroke-width="1.2" opacity=".6"/>' +
+    '<path d="M41 42 L60 28 L79 42" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>' +
+    '<text x="60" y="72" text-anchor="middle" font-family="Georgia,Times New Roman,serif" font-weight="700" font-size="29" letter-spacing="1.5" fill="#fff">GRS</text>' +
+    '<line x1="38" y1="81" x2="82" y2="81" stroke="#fff" stroke-width="1.2" opacity=".8"/>' +
+    '<text x="60" y="94" text-anchor="middle" font-family="Arial,sans-serif" font-size="9.5" font-weight="700" letter-spacing="4" fill="#fff">HOTEL</text></svg>';
+}
+Array.prototype.forEach.call(document.querySelectorAll('.grs-logo, .brand-logo'), function (el) { el.innerHTML = grsLogoSvg(); });
+
 function logout() { call('logout').catch(function () {}); S.token = null; store('hm_token', null); showLogin(); }
 
 function boot() {
@@ -664,8 +690,8 @@ function resizeImage(file, maxW, maxH) {
   });
 }
 function setBrandLogo(src) {
-  var el = document.querySelector('.brand span');
-  el.innerHTML = src ? '<img src="' + esc(src) + '" alt="" style="height:28px;max-width:60px;object-fit:contain;background:#fff;border-radius:4px;padding:2px">' : '🏨';
+  var el = document.querySelector('.brand-logo');
+  el.innerHTML = src ? '<img src="' + esc(src) + '" alt="GRS Hotel">' : grsLogoSvg();
 }
 
 // ============================================================= USERS (admin)

@@ -8,21 +8,45 @@
 <body>
   <!-- Login -->
   <div id="login-view" class="login-wrap hidden">
-    <form id="login-form" class="login-card">
-      <div class="brand-big">🏨</div>
-      <h2>Hotel Management</h2>
-      <p class="muted">Sign in to continue</p>
-      <label>Email<input name="email" type="email" required autocomplete="username"></label>
-      <label>Password<input name="password" type="password" required autocomplete="current-password"></label>
-      <div id="login-error" class="alert error hidden"></div>
-      <button class="btn primary block" type="submit">Sign in</button>
-    </form>
+    <div class="login-bg"><span></span><span></span><span></span><span></span></div>
+    <div class="login-panel">
+      <section class="login-hero">
+        <div class="grs-logo hero-logo"></div>
+        <h1>GRS Hotel</h1>
+        <p class="tagline">Comfort &middot; Care &middot; Hospitality</p>
+        <ul class="hero-points">
+          <li><span>🛏️</span>Live room board &amp; bookings</li>
+          <li><span>🧾</span>GST invoices &amp; payments</li>
+          <li><span>📊</span>Daily reports at a glance</li>
+        </ul>
+        <div class="hero-foot">Staff portal &copy; <span id="yr"></span> GRS Hotel</div>
+      </section>
+      <form id="login-form" class="login-card" novalidate>
+        <div class="grs-logo card-logo"></div>
+        <h2>Welcome to GRS Hotel</h2>
+        <p class="muted">Sign in to your staff account</p>
+        <div class="field">
+          <input id="lg-email" name="email" type="email" required autocomplete="username" placeholder=" ">
+          <label for="lg-email">Email address</label>
+          <span class="f-ico">✉</span>
+        </div>
+        <div class="field">
+          <input id="lg-pass" name="password" type="password" required autocomplete="current-password" placeholder=" ">
+          <label for="lg-pass">Password</label>
+          <button type="button" class="eye" id="lg-eye" aria-label="Show password" title="Show password">👁</button>
+        </div>
+        <div id="caps-warn" class="caps hidden">⚠ Caps Lock is on</div>
+        <div id="login-error" class="alert error hidden"></div>
+        <button class="btn primary block login-btn" type="submit"><span class="btn-txt">Sign in</span><span class="btn-spin"></span></button>
+        <p class="muted small center secure">🔒 Secure staff access only</p>
+      </form>
+    </div>
   </div>
 
   <!-- App shell -->
   <div id="app-view" class="shell hidden">
     <aside id="sidebar" class="sidebar">
-      <div class="brand"><span>🏨</span><span id="hotel-name">Hotel</span></div>
+      <div class="brand"><span class="brand-logo"></span><span id="hotel-name">GRS Hotel</span></div>
       <nav id="nav"></nav>
       <div class="side-foot">
         <div id="me-name" class="me"></div>

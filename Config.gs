@@ -90,7 +90,7 @@ var HEADER_COLORS = {
 };
 
 var DEFAULT_SETTINGS = {
-  hotel_name: 'Grand Horizon Hotel & Suites',
+  hotel_name: 'GRS Hotel',
   address: '',
   city: '',
   state: '',
