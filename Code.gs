@@ -55,6 +55,17 @@ function doGet() {
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.DEFAULT);
 }
 
+/**
+ * JSON API for the Flutter mobile app.
+ * POST body: {"action": "...", "token": "...", "payload": {...}}  ->  same JSON as api().
+ */
+function doPost(e) {
+  var body = {};
+  try { body = JSON.parse((e && e.postData && e.postData.contents) || '{}'); } catch (err) { body = {}; }
+  var out = api(String(body.action || ''), body.token || null, body.payload || {});
+  return ContentService.createTextOutput(out).setMimeType(ContentService.MimeType.JSON);
+}
+
 function include(name) {
   return HtmlService.createHtmlOutputFromFile(name).getContent();
 }
