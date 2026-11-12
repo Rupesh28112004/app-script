@@ -13,9 +13,18 @@ var Db = (function () {
     return _ss;
   }
 
+  var _healed = false;
   function sheet(name) {
     var sh = ss().getSheetByName(name);
-    if (!sh) throw new Error('Sheet "' + name + '" is missing. Run setup() from the Apps Script editor (or Hotel menu > Setup).');
+    if (!sh && !_healed && SCHEMA[name]) {
+      // Self-heal: create any missing tabs (same as running setup) the first time one is needed.
+      _healed = true;
+      setup();
+      sh = ss().getSheetByName(name);
+    }
+    if (!sh) {
+      throw new Error('Sheet "' + name + '" is missing in spreadsheet "' + ss().getName() + '". Run setup() from the Apps Script editor (or Hotel menu > Setup).');
+    }
     return sh;
   }
 
