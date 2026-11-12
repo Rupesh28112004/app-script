@@ -2,132 +2,213 @@
 <html>
 <head>
 <meta charset="utf-8">
-<title>Invoice <?= inv.invoice_number ?></title>
+<title>Invoice - <?= inv.invoice_number ?></title>
 <style>
-  * { box-sizing: border-box; }
-  body { font-family: Arial, Helvetica, sans-serif; color: #1f2937; font-size: 12px; margin: 0; padding: 24px; }
-  .wrap { max-width: 800px; margin: 0 auto; }
-  table { width: 100%; border-collapse: collapse; }
-  .top td { vertical-align: top; }
-  h1 { font-size: 22px; margin: 0 0 4px; color: #1e3a5f; }
-  .muted { color: #6b7280; }
-  .title { font-size: 26px; font-weight: bold; color: #1e3a5f; text-align: right; letter-spacing: 2px; }
-  .badge { display: inline-block; padding: 3px 10px; border-radius: 10px; font-size: 11px; font-weight: bold; text-transform: uppercase; }
-  .paid { background: #dcfce7; color: #166534; } .partially_paid { background: #fef3c7; color: #92400e; } .unpaid { background: #fee2e2; color: #991b1b; }
-  .box { border: 1px solid #e5e7eb; border-radius: 6px; padding: 10px 12px; }
-  .items th { background: #1e3a5f; color: #fff; text-align: left; padding: 8px; font-size: 11px; text-transform: uppercase; }
-  .items td { padding: 8px; border-bottom: 1px solid #e5e7eb; }
-  .r { text-align: right; }
-  .totals td { padding: 5px 8px; }
-  .grand td { font-size: 15px; font-weight: bold; border-top: 2px solid #1e3a5f; color: #1e3a5f; }
-  .small { font-size: 11px; }
-  .sec { margin-top: 18px; }
+  @page { margin: 24px 26px; size: A4 portrait; }
+  body { font-family: Helvetica, Arial, sans-serif; margin: 0; padding: 18px 20px; }
+  .bill { color: #222; font-size: 11.5px; line-height: 1.4; -webkit-print-color-adjust: exact; print-color-adjust: exact; max-width: 860px; margin: 0 auto; }
+  .bill table { width: 100%; border-collapse: collapse; }
+  .bill td, .bill th { vertical-align: top; text-align: left; }
+  .bill .r { text-align: right !important; }
+  .bill .c { text-align: center !important; }
+  .bill .b { font-weight: bold; }
+  .bill .i { font-style: italic; }
+  .bill .blue { color: #1c6db5; }
+
+  /* Company header */
+  .b-head td { vertical-align: middle; }
+  .b-name { font-size: 22px; font-weight: bold; color: #222; }
+  .b-addr { font-size: 12.5px; color: #444; }
+  .b-rule { border-bottom: 1.5px solid #1c6db5; margin-top: 6px; }
+
+  /* Outer box */
+  .b-box { border: 1px solid #1c6db5; }
+  .b-title td { padding: 5px 8px; border-bottom: 1px solid #1c6db5; font-size: 13px; font-weight: bold; }
+  .b-sec { background: #e8f1fb; color: #1c6db5; font-weight: bold; font-size: 13px; padding: 5px 8px; }
+  .b-col { border-right: 1px solid #1c6db5; }
+  .b-col-last { border-right: 0; }
+  .b-kv td { padding: 1.5px 0; font-size: 11.5px; }
+  .b-kv td.k { font-weight: bold; width: 1%; white-space: nowrap; padding-right: 6px; }
+  .b-pad { padding: 4px 8px 8px; }
+
+  /* Items */
+  .b-items th { background: #e8f1fb; color: #1c6db5; font-weight: bold; font-size: 11px; padding: 6px 5px;
+    border-top: 1px solid #1c6db5; border-bottom: 1px solid #1c6db5; border-right: 1px solid #b9d3ee; vertical-align: middle; }
+  .b-items th.last, .b-items td.last { border-right: 0; }
+  .b-items td { padding: 6px 5px; border-right: 1px solid #b9d3ee; }
+  .b-items .b-fill td { padding: 0; }
+  .b-items .b-tot td { border-top: 1px solid #1c6db5; font-weight: bold; padding: 5px; }
+  .b-items .b-tot td.lbl { border-right: 0; }
+
+  /* Footer */
+  .b-foot { border-top: 1px solid #1c6db5; }
+  .b-foot td.left { width: 58%; border-right: 1px solid #1c6db5; }
+  .b-foot td.right { width: 42%; }
+  .b-line { padding: 6px 8px; border-bottom: 1px dotted #b9c6d6; }
+  .b-sum td { padding: 5px 8px; border-bottom: 1px solid #d5e3f2; }
+  .b-sum td.k { text-align: right; font-weight: bold; width: 60%; }
+  .b-sum tr.grand td { background: #e8f1fb; color: #1c6db5; font-weight: bold; font-size: 14px; border-bottom: 1px solid #1c6db5; }
+  .b-sign { background: #e8f1fb; color: #1c6db5; font-weight: bold; text-align: center; padding: 5px 8px; }
+  .b-terms { padding: 6px 8px; font-size: 11px; }
 </style>
 </head>
 <body>
-<? var h = inv.hotel || {}; var cur = h.currency_symbol || '₹';
-   var money = function (n) { var p = Number(n || 0).toFixed(2).split('.'); return cur + ' ' + p[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',') + '.' + p[1]; };
-   var label = function (s) { return String(s || '').replace(/_/g, ' ').replace(/\b\w/g, function (c) { return c.toUpperCase(); }); }; ?>
-<div class="wrap">
-  <table class="top">
+<div class="bill">
+  <!-- Company header -->
+  <table class="b-head">
     <tr>
-      <td style="width:60%">
-        <h1><?= h.hotel_name ?></h1>
-        <div class="muted"><?= h.address ?></div>
-        <div class="muted"><?= [h.city, h.state, h.postal_code].filter(String).join(', ') ?><?= h.country ? ' — ' + h.country : '' ?></div>
-        <div class="muted"><?= [h.phone, h.email, h.website].filter(String).join(' · ') ?></div>
-        <? if (h.gstin) { ?><div><b>GSTIN:</b> <?= h.gstin ?></div><? } ?>
-      </td>
-      <td style="width:40%" class="r">
-        <div class="title">INVOICE</div>
-        <div><b><?= inv.invoice_number ?></b></div>
-        <div class="muted">Date: <?= inv.invoice_date ?></div>
-        <? if (inv.due_date) { ?><div class="muted">Due: <?= inv.due_date ?></div><? } ?>
-        <div style="margin-top:6px"><span class="badge <?= inv.payment_status ?>"><?= label(inv.payment_status) ?></span></div>
+      <? if (logo) { ?>
+        <td style="width:1%;padding-right:10px"><img src="<?!= logo ?>" alt="" style="max-height:60px;max-width:150px"></td>
+      <? } ?>
+      <td>
+        <div class="b-name"><?= h.hotel_name ?></div>
+        <? if (h.full_address) { ?><div class="b-addr"><?= h.full_address ?></div><? } ?>
+        <div class="b-addr"><?= [h.email ? 'Email: ' + h.email : '', h.phone ? 'Contact: ' + h.phone : ''].filter(String).join(' | ') ?></div>
       </td>
     </tr>
   </table>
+  <div class="b-rule" style="margin-bottom:8px"></div>
 
-  <table class="sec top">
-    <tr>
-      <td style="width:50%;padding-right:8px">
-        <div class="box">
-          <div class="muted small">BILL TO</div>
-          <b><?= inv.guest.full_name ?></b><br>
-          <?= inv.guest.mobile_number ?><? if (inv.guest.email) { ?> · <?= inv.guest.email ?><? } ?><br>
-          <span class="muted"><?= [inv.guest.address, inv.guest.city, inv.guest.state].filter(String).join(', ') ?></span>
-          <? if (inv.guest.id_type) { ?><br><span class="muted"><?= inv.guest.id_type ?>: <?= inv.guest.id_number_masked ?></span><? } ?>
-        </div>
-      </td>
-      <td style="width:50%;padding-left:8px">
-        <div class="box">
-          <div class="muted small">STAY DETAILS</div>
-          <? if (inv.booking) { var b = inv.booking; ?>
-            Booking: <b><?= b.booking_number ?></b><br>
-            Room: <?= b.room_number ?> (<?= b.room_type ?>)<br>
-            Check-in: <?= b.check_in_at ?><br>
-            Check-out: <?= b.actual_check_out_at || b.expected_check_out_at ?><br>
-            Guests: <?= b.adults_count ?> adult(s)<?= b.children_count ? ', ' + b.children_count + ' child(ren)' : '' ?>
-          <? } else { ?><span class="muted">Walk-in / service invoice</span><? } ?>
-        </div>
-      </td>
-    </tr>
-  </table>
-
-  <table class="items sec">
-    <thead><tr><th>#</th><th>Description</th><th>Category</th><th class="r">Qty</th><th class="r">Rate</th><th class="r">Amount</th></tr></thead>
-    <tbody>
-    <? inv.items.forEach(function (it, i) { ?>
+  <div class="b-box">
+    <!-- Title bar -->
+    <table class="b-title">
       <tr>
-        <td><?= i + 1 ?></td><td><?= it.description ?></td><td><?= label(it.category) ?></td>
-        <td class="r"><?= it.quantity ?></td><td class="r"><?= money(it.unit_price) ?></td>
-        <td class="r"><?= it.category === 'discount' ? '- ' : '' ?><?= money(Math.abs(it.total_price)) ?></td>
+        <td style="width:38%"><?= h.gstin ? 'GSTIN : ' + h.gstin : '' ?></td>
+        <td style="width:24%" class="c blue">Tax Invoice</td>
+        <td style="width:38%" class="r">GUEST COPY</td>
       </tr>
-    <? }); ?>
-    </tbody>
-  </table>
+    </table>
 
-  <table class="sec top">
-    <tr>
-      <td style="width:55%;padding-right:12px" class="small">
-        <? if (inv.payments.length) { ?>
-          <b>Payments received</b>
-          <? inv.payments.forEach(function (p) { ?>
-            <div class="muted"><?= p.payment_date ?> — <?= label(p.payment_method) ?> — <?= money(p.amount) ?><?= p.transaction_reference ? ' (Ref: ' + p.transaction_reference + ')' : '' ?></div>
-          <? }); ?>
-        <? } ?>
-        <? if (h.bank_name || h.bank_upi_id) { ?>
-          <div style="margin-top:10px"><b>Bank details</b><br>
-            <? if (h.bank_name) { ?><?= h.bank_name ?> · A/C <?= h.bank_account_number ?> · IFSC <?= h.bank_ifsc ?><br><? } ?>
-            <? if (h.bank_upi_id) { ?>UPI: <?= h.bank_upi_id ?><? } ?>
+    <!-- Guest / Stay / Invoice details -->
+    <table>
+      <tr>
+        <td class="b-col" style="width:38%">
+          <div class="b-sec" style="margin:4px 8px 4px 4px">Details of Guest | Billed to :</div>
+          <div class="b-pad"><table class="b-kv">
+            <tr><td class="k">Name</td><td>: <?= g.full_name ?></td></tr>
+            <? if (g.address || g.city) { ?>
+              <tr><td class="k">Address</td><td>: <?= [g.address, g.city, ((g.state || '') + (g.postal_code ? ' - ' + g.postal_code : '')).trim()].filter(String).join(', ') ?></td></tr>
+            <? } ?>
+            <tr><td class="k">Phone</td><td>: <?= g.mobile_number ?></td></tr>
+            <? if (g.email) { ?><tr><td class="k">Email</td><td>: <?= g.email ?></td></tr><? } ?>
+            <? if (g.id_type) { ?><tr><td class="k">ID Proof</td><td>: <?= g.id_type ?><?= idMasked ? ' (' + idMasked + ')' : '' ?></td></tr><? } ?>
+            <? if (g.state) { ?><tr><td class="k">State</td><td>: <?= g.state ?></td></tr><? } ?>
+            <? if (h.state) { ?><tr><td class="k">Place of Supply</td><td>: <?= h.state ?></td></tr><? } ?>
+          </table></div>
+        </td>
+        <td class="b-col" style="width:31%">
+          <div class="b-sec" style="margin:4px 8px 4px 4px">Stay Details :</div>
+          <div class="b-pad">
+            <? if (b) { ?>
+              <table class="b-kv">
+                <? if (b.room_number) { ?>
+                  <tr><td class="k">Room No.</td><td>: <?= b.room_number ?></td></tr>
+                  <tr><td class="k">Room Type</td><td>: <?= b.room_type ?></td></tr>
+                <? } ?>
+                <tr><td class="k">Check-in</td><td>: <?= fmt(b.check_in_at, true) ?></td></tr>
+                <? if (b.actual_check_out_at || b.expected_check_out_at) { ?><tr><td class="k">Check-out</td><td>: <?= fmt(b.actual_check_out_at || b.expected_check_out_at, true) ?></td></tr><? } ?>
+                <tr><td class="k">Duration</td><td>: <?= num(b.units_booked) ?> <?= b.billing_type === 'hourly' ? 'Hour(s)' : 'Night(s)' ?></td></tr>
+                <tr><td class="k">Guests</td><td>: <?= b.adults_count ?> Adult(s)<?= b.children_count ? ', ' + b.children_count + ' Child(ren)' : '' ?></td></tr>
+              </table>
+            <? } else { ?>
+              <table class="b-kv"><tr><td>Direct billing</td></tr></table>
+            <? } ?>
           </div>
-        <? } ?>
-        <? if (inv.notes) { ?><div style="margin-top:10px"><b>Notes:</b> <?= inv.notes ?></div><? } ?>
-      </td>
-      <td style="width:45%">
-        <table class="totals">
-          <? if (inv.room_charges) { ?><tr><td>Room charges</td><td class="r"><?= money(inv.room_charges) ?></td></tr><? } ?>
-          <? if (inv.food_charges) { ?><tr><td>Food charges</td><td class="r"><?= money(inv.food_charges) ?></td></tr><? } ?>
-          <? if (inv.service_charges) { ?><tr><td>Service charges</td><td class="r"><?= money(inv.service_charges) ?></td></tr><? } ?>
-          <? if (inv.other_charges) { ?><tr><td>Other charges</td><td class="r"><?= money(inv.other_charges) ?></td></tr><? } ?>
-          <? if (inv.discount_amount) { ?><tr><td>Discount</td><td class="r">- <?= money(inv.discount_amount) ?></td></tr><? } ?>
-          <tr><td><b>Subtotal</b></td><td class="r"><b><?= money(inv.subtotal) ?></b></td></tr>
-          <tr><td><?= inv.tax_name ?> (<?= inv.tax_rate ?>%)</td><td class="r"><?= money(inv.tax_amount) ?></td></tr>
-          <tr class="grand"><td>Grand Total</td><td class="r"><?= money(inv.grand_total) ?></td></tr>
-          <tr><td>Paid</td><td class="r"><?= money(inv.paid_amount) ?></td></tr>
-          <tr><td><b>Balance due</b></td><td class="r"><b><?= money(inv.balance_amount) ?></b></td></tr>
-        </table>
-      </td>
-    </tr>
-  </table>
+        </td>
+        <td class="b-col-last" style="width:31%">
+          <div class="b-sec" style="margin:4px">Invoice Information :</div>
+          <div class="b-pad"><table class="b-kv">
+            <tr><td class="k">Invoice No.</td><td>: <span class="b"><?= inv.invoice_number ?></span></td></tr>
+            <tr><td class="k">Invoice Date</td><td>: <?= fmt(inv.invoice_date, false) ?></td></tr>
+            <? if (b) { ?><tr><td class="k">Booking No.</td><td style="white-space:nowrap">: <?= b.booking_number ?></td></tr><? } ?>
+            <tr><td class="k">Payment Mode</td><td>: <?= modes[inv.primary_payment_method] || inv.primary_payment_method || '-' ?></td></tr>
+            <tr><td class="k">Reverse Charge</td><td>: No</td></tr>
+            <? if (creator) { ?><tr><td class="k">Prepared By</td><td>: <?= creator ?></td></tr><? } ?>
+          </table></div>
+        </td>
+      </tr>
+    </table>
 
-  <? if (h.terms_and_conditions) { ?>
-    <div class="sec small muted"><b>Terms &amp; Conditions</b><br><?= h.terms_and_conditions ?></div>
-  <? } ?>
-  <table class="sec"><tr>
-    <td class="small muted"><?= h.footer_message ?></td>
-    <td class="r small" style="padding-top:30px">______________________<br>Authorised Signatory</td>
-  </tr></table>
+    <!-- Charges -->
+    <table class="b-items">
+      <thead>
+        <tr>
+          <th style="width:7%" class="c">S.No.</th>
+          <th style="width:45%">Particulars</th>
+          <th style="width:11%" class="c">SAC</th>
+          <th style="width:13%" class="r">Rate (Rs.)</th>
+          <th style="width:9%" class="c"><?= b && b.billing_type === 'hourly' ? 'Hours' : 'Nights' ?></th>
+          <th style="width:15%" class="r last">Amount (Rs.)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <? lines.forEach(function (it, i) { ?>
+          <tr>
+            <td class="c"><?= i + 1 ?></td>
+            <td class="b"><?= it.description ?></td>
+            <td class="c"><?= sac[it.category] || '' ?></td>
+            <td class="r"><?= amt(it.unit_price) ?></td>
+            <td class="c"><?= it.category === 'room' || Number(it.quantity) !== 1 ? num(it.quantity) : '' ?></td>
+            <td class="r last"><?= amt(it.total_price) ?></td>
+          </tr>
+        <? }); ?>
+        <tr class="b-fill">
+          <td style="height:<?= fillerHeight ?>px"></td><td></td><td></td><td></td><td></td><td class="last"></td>
+        </tr>
+        <tr class="b-tot">
+          <td class="lbl"></td>
+          <td class="r" colspan="4" style="border-right:1px solid #b9d3ee">Total</td>
+          <td class="r last"><?= amt(gross) ?></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- Words, bank, terms | summary, signature -->
+    <table class="b-foot">
+      <tr>
+        <td class="left">
+          <div class="b-sec">Total in words</div>
+          <div class="b-line b" style="border-bottom:1px solid #1c6db5"><?= words ?></div>
+
+          <div class="b-sec">Bank Details</div>
+          <table>
+            <tr><td class="b-line b" style="width:28%">Name</td><td class="b-line"><?= h.bank_name ?></td></tr>
+            <tr><td class="b-line b">Acc. Name</td><td class="b-line"><?= h.hotel_name ?></td></tr>
+            <tr><td class="b-line b">Acc. Number</td><td class="b-line"><?= h.bank_account_number ?></td></tr>
+            <tr><td class="b-line b">IFSC</td><td class="b-line"><?= h.bank_ifsc ?></td></tr>
+            <tr><td class="b-line b" style="border-bottom:1px solid #1c6db5">UPI ID</td><td class="b-line" style="border-bottom:1px solid #1c6db5"><?= h.bank_upi_id ?></td></tr>
+          </table>
+
+          <div class="b-sec">Terms &amp; Conditions</div>
+          <div class="b-terms">
+            <? if (h.terms_and_conditions) { h.terms_and_conditions.split(/\r?\n/).forEach(function (line, i) { ?><?!= i ? '<br>' : '' ?><?= line ?><? }); } else { ?>-<? } ?>
+          </div>
+        </td>
+        <td class="right">
+          <table class="b-sum">
+            <tr><td class="k">Sub Total</td><td class="r"><?= amt(gross) ?></td></tr>
+            <tr><td class="k">Discount</td><td class="r"><?= amt(inv.discount_amount) ?></td></tr>
+            <tr><td class="k">Taxable Amount</td><td class="r"><?= amt(inv.subtotal) ?></td></tr>
+            <? if (isGst) { ?>
+              <tr><td class="k">Add : CGST @ <?= halfRate ?>%</td><td class="r"><?= amt(cgst) ?></td></tr>
+              <tr><td class="k">Add : SGST @ <?= halfRate ?>%</td><td class="r"><?= amt(sgst) ?></td></tr>
+            <? } else { ?>
+              <tr><td class="k">Add : <?= inv.tax_name ?> @ <?= taxRate ?>%</td><td class="r"><?= amt(inv.tax_amount) ?></td></tr>
+            <? } ?>
+            <tr><td class="k">Total Tax</td><td class="r"><?= amt(inv.tax_amount) ?></td></tr>
+            <tr class="grand"><td class="k" style="color:#1c6db5">Total Amount After Tax</td><td class="r">Rs. <?= amt(inv.grand_total) ?></td></tr>
+          </table>
+          <div class="r b" style="font-size:10.5px;padding:3px 8px">(E &amp; O.E.)</div>
+          <div class="c b i blue" style="padding:4px 8px 8px;border-bottom:1px solid #1c6db5">Certified that the particulars given above are true and correct.</div>
+          <div class="c b" style="padding:6px 8px">For <?= h.hotel_name ?></div>
+          <div class="c" style="height:58px;padding:0 8px">
+            <? if (signature) { ?><img src="<?!= signature ?>" alt="" style="max-height:56px;max-width:160px"><? } ?>
+          </div>
+          <div class="b-sign">Authorised Signatory</div>
+        </td>
+      </tr>
+    </table>
+  </div>
 </div>
 </body>
 </html>

@@ -54,8 +54,13 @@ var SCHEMA = {
   Settings: ['key', 'value'],
 
   ActivityLog: ['id', 'created_at', 'user_id', 'user_name', 'action', 'description',
-    'subject_type', 'subject_id']
+    'subject_type', 'subject_id'],
+
+  // Uploaded images (hotel logo, signature/stamp) stored as base64 split over several rows
+  Assets: ['key', 'chunk', 'data']
 };
+
+var ASSET_KEYS = ['logo', 'signature'];
 
 // Columns stored as numbers (everything else is stored as plain text).
 var NUMERIC = {
@@ -70,7 +75,8 @@ var NUMERIC = {
   Payments: ['id', 'invoice_id', 'booking_id', 'guest_id', 'amount', 'recorded_by'],
   Users: ['id'],
   Settings: [],
-  ActivityLog: ['id', 'user_id', 'subject_id']
+  ActivityLog: ['id', 'user_id', 'subject_id'],
+  Assets: ['chunk']
 };
 
 var BOOLEAN = {
@@ -80,7 +86,7 @@ var BOOLEAN = {
 var HEADER_COLORS = {
   Rooms: '#1e3a5f', Guests: '#1e3a5f', Bookings: '#1e3a5f', Invoices: '#1e3a5f',
   InvoiceItems: '#334155', Payments: '#334155', Users: '#7c2d12', Settings: '#7c2d12',
-  ActivityLog: '#475569'
+  ActivityLog: '#475569', Assets: '#475569'
 };
 
 var DEFAULT_SETTINGS = {

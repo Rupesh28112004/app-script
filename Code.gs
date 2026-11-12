@@ -40,8 +40,9 @@ var ROUTES = {
   invoicePdf:       { fn: invoicePdf_, roles: STAFF },
 
   reports:          { fn: reports_, roles: ADMIN },
-  getSettings:      { fn: function () { return Db.getSettings(); }, roles: ADMIN },
+  getSettings:      { fn: function () { var s = Db.getSettings(); s.logo = Db.getAsset('logo'); s.signature = Db.getAsset('signature'); return s; }, roles: ADMIN },
   saveSettings:     { fn: saveSettings_, roles: ADMIN, write: true },
+  saveAsset:        { fn: saveAsset_, roles: ADMIN, write: true },
   listUsers:        { fn: listUsers_, roles: ADMIN },
   saveUser:         { fn: saveUser_, roles: ADMIN, write: true },
   toggleUser:       { fn: toggleUser_, roles: ADMIN, write: true }
@@ -146,7 +147,8 @@ function setup() {
     sh.getRange(1, 1, 1, headers.length)
       .setFontWeight('bold').setFontColor('#ffffff').setBackground(HEADER_COLORS[name] || '#1e3a5f');
     sh.setFrozenRows(1);
-    sh.autoResizeColumns(1, headers.length);
+    if (name === 'Assets') { sh.setColumnWidth(3, 300); sh.hideSheet(); }
+    else sh.autoResizeColumns(1, headers.length);
   });
 
   // Hide the password columns from casual viewing

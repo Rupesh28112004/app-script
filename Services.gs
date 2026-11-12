@@ -361,9 +361,9 @@ function billingPrefill_(p) {
     if (b.invoice_id) throw new Error('Booking ' + b.booking_number + ' already has invoice ' + b.invoice_number + '.');
     out.booking = b;
     out.guest = b.guest;
-    var unitLabel = b.billing_type === 'hourly' ? 'hour(s)' : 'night(s)';
+    var unitLabel = b.billing_type === 'hourly' ? 'Hours' : 'Nights';
     out.items.push({
-      description: 'Room ' + b.room_number + ' (' + b.room_type + ') — ' + b.units_booked + ' ' + unitLabel,
+      description: 'Room Accommodation - Room ' + b.room_number + ' (' + b.units_booked + ' ' + unitLabel + ')',
       category: 'room', quantity: b.units_booked, unit_price: b.rate_applied
     });
   }
@@ -486,11 +486,117 @@ function getInvoice_(p) {
   return inv;
 }
 
-/** Printable invoice HTML (used for Print and PDF). */
+/** 1234567.5 -> "12,34,567.50" (Indian digit grouping). */
+function formatIndian_(amount) {
+  amount = Number(amount) || 0;
+  var parts = Math.abs(amount).toFixed(2).split('.');
+  var whole = parts[0];
+  if (whole.length > 3) {
+    whole = whole.slice(0, -3).replace(/\B(?=(\d{2})+(?!\d))/g, ',') + ',' + whole.slice(-3);
+  }
+  return (amount < 0 ? '-' : '') + whole + '.' + parts[1];
+}
+
+/** 5376 -> "Five Thousand Three Hundred Seventy Six" (crore / lakh system). */
+function spellIndian_(n) {
+  n = Math.floor(Math.abs(Number(n) || 0));
+  var ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten', 'Eleven', 'Twelve',
+    'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
+  var tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+  var below100 = function (x) { return x < 20 ? ones[x] : (tens[Math.floor(x / 10)] + ' ' + ones[x % 10]).trim(); };
+  var below1000 = function (x) {
+    var out = [];
+    if (Math.floor(x / 100)) out.push(ones[Math.floor(x / 100)] + ' Hundred');
+    if (x % 100) out.push(below100(x % 100));
+    return out.join(' ');
+  };
+  if (n === 0) return 'Zero';
+  var parts = [];
+  var crore = Math.floor(n / 10000000); n %= 10000000;
+  var lakh = Math.floor(n / 100000); n %= 100000;
+  var thousand = Math.floor(n / 1000); n %= 1000;
+  if (crore) parts.push(spellIndian_(crore) + ' Crore');
+  if (lakh) parts.push(below100(lakh) + ' Lakh');
+  if (thousand) parts.push(below100(thousand) + ' Thousand');
+  if (n) parts.push(below1000(n));
+  return parts.join(' ');
+}
+
+function amountInWords_(amount) {
+  var grand = round2_(amount);
+  var rupees = Math.floor(grand);
+  var paise = Math.round((grand - rupees) * 100);
+  return (spellIndian_(rupees) + ' Rupees' + (paise > 0 ? ' and ' + spellIndian_(paise) + ' Paise' : '') + ' Only').toUpperCase();
+}
+
+/** "2026-11-12 14:30" -> "12-Nov-2026 02:30 PM" ; withTime=false -> "12-Nov-2026" */
+function fmtBill_(s, withTime) {
+  if (!str_(s)) return '';
+  var d = parseDt_(s);
+  return Utilities.formatDate(d, Db.tz(), withTime ? 'dd-MMM-yyyy hh:mm a' : 'dd-MMM-yyyy');
+}
+
+/** Printable tax invoice HTML (used for Print and PDF) — same layout as the Laravel invoice. */
 function invoiceHtml_(p) {
+  var inv = getInvoice_(p);
+  var s = Db.getSettings();
+  var snap = inv.hotel || {};
+  // Current hotel settings win; the snapshot taken when the invoice was created is the fallback.
+  var pick = function (k) { return str_(s[k]) || str_(snap[k]); };
+  var h = {};
+  ['hotel_name', 'address', 'city', 'state', 'country', 'postal_code', 'phone', 'email', 'gstin', 'bank_name',
+    'bank_account_number', 'bank_ifsc', 'bank_upi_id', 'terms_and_conditions'].forEach(function (k) { h[k] = pick(k); });
+  h.full_address = [h.address, h.city, (h.state + (h.postal_code ? ' - ' + h.postal_code : '')).trim(), h.country]
+    .filter(function (x) { return x; }).join(', ');
+
+  var lines = inv.items.filter(function (i) { return i.category !== 'discount'; });
+  var gross = round2_(lines.reduce(function (sum, i) { return sum + i.total_price; }, 0));
+  var cgst = round2_(inv.tax_amount / 2);
+  var num = function (v) { return String(round2_(v)); }; // 6.00 -> "6", 1.5 -> "1.5"
+
   var t = HtmlService.createTemplateFromFile('InvoicePrint');
-  t.inv = getInvoice_(p);
+  t.inv = inv;
+  t.h = h;
+  t.g = inv.guest || {};
+  // "XXXXXXXX8841" -> "•••• •••• 8841"
+  t.idMasked = String(t.g.id_number_masked || '').replace(/^(X+)(.{1,4})$/, function (m, xs, last) {
+    return xs.replace(/X{1,4}/g, function (grp) { return new Array(grp.length + 1).join('•') + ' '; }) + last;
+  });
+  t.b = inv.booking;
+  t.lines = lines;
+  t.gross = gross;
+  t.isGst = String(inv.tax_name).toUpperCase() === 'GST';
+  t.halfRate = num(inv.tax_rate / 2);
+  t.taxRate = num(inv.tax_rate);
+  t.cgst = cgst;
+  t.sgst = round2_(inv.tax_amount - cgst);
+  t.words = amountInWords_(inv.grand_total);
+  t.creator = (Db.find('Users', inv.created_by) || {}).name || '';
+  t.logo = Db.getAsset('logo');
+  t.signature = Db.getAsset('signature');
+  t.fillerHeight = Math.max(30, 170 - lines.length * 30);
+  t.amt = formatIndian_;
+  t.num = num;
+  t.fmt = fmtBill_;
+  t.sac = { room: '996311', food: '996331' };
+  t.modes = { cash: 'Cash', credit_card: 'Credit Card', debit_card: 'Debit Card', bank_transfer: 'Bank Transfer', upi: 'UPI', cheque: 'Cheque' };
   return t.evaluate().getContent();
+}
+
+/** Upload / remove the hotel logo or signature-stamp image (admin). */
+function saveAsset_(p, user) {
+  if (ASSET_KEYS.indexOf(p.key) === -1) throw new Error('Invalid image type.');
+  var data = str_(p.data);
+  if (!data) {
+    Db.deleteAsset(p.key);
+    logActivity_(user, 'settings_updated', 'Removed hotel ' + p.key + '.');
+    return true;
+  }
+  if (!/^data:image\/(png|jpeg|gif|webp);base64,[A-Za-z0-9+\/=]+$/.test(data)) throw new Error('Please upload a PNG, JPG, GIF or WEBP image.');
+  if (data.length > 700000) throw new Error('Image is too large. Please use a smaller image (under ~500 KB).');
+  Db.saveAsset(p.key, data);
+  logActivity_(user, 'settings_updated', 'Updated hotel ' + p.key + '.');
+  return true;
 }
 
 function invoicePdf_(p) {
@@ -651,6 +757,7 @@ function bootstrap_(p, user) {
   return {
     user: publicUser_(user),
     settings: Db.getSettings(),
+    logo: Db.getAsset('logo'),
     lists: { room_statuses: ROOM_STATUSES, payment_methods: PAYMENT_METHODS, item_categories: ITEM_CATEGORIES, id_types: ID_TYPES, roles: USER_ROLES },
     room_types: Db.all('Rooms').map(function (r) { return r.room_type; }).filter(function (v, i, a) { return v && a.indexOf(v) === i; })
   };

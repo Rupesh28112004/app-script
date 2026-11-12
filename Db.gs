@@ -188,7 +188,41 @@ var Db = (function () {
     return getSettings();
   }
 
+  // ---- Assets (images as data URIs, split into 45k-char chunks; a cell holds max 50k chars) ----
+  var CHUNK = 45000;
+  function assetRows(key) {
+    var sh = sheet('Assets');
+    var last = sh.getLastRow();
+    if (last < 2) return [];
+    return sh.getRange(2, 1, last - 1, 3).getValues()
+      .map(function (r, i) { return { row: i + 2, key: String(r[0]), chunk: Number(r[1]), data: String(r[2]) }; })
+      .filter(function (r) { return r.key === key; });
+  }
+
+  function getAsset(key) {
+    return assetRows(key)
+      .sort(function (a, b) { return a.chunk - b.chunk; })
+      .map(function (r) { return r.data.substring(1); }) // strip "~" guard
+      .join('');
+  }
+
+  function deleteAsset(key) {
+    var sh = sheet('Assets');
+    assetRows(key).map(function (r) { return r.row; }).sort(function (a, b) { return b - a; })
+      .forEach(function (row) { sh.deleteRow(row); });
+  }
+
+  function saveAsset(key, dataUri) {
+    deleteAsset(key);
+    var sh = sheet('Assets');
+    for (var i = 0, n = 0; i < dataUri.length; i += CHUNK, n++) {
+      // "~" guard stops Sheets from treating chunks that start with + / = as formulas or numbers
+      sh.appendRow([key, n, '~' + dataUri.substring(i, i + CHUNK)]);
+    }
+  }
+
   return {
+    getAsset: getAsset, saveAsset: saveAsset, deleteAsset: deleteAsset,
     ss: ss, sheet: sheet, tz: tz, nowStr: nowStr,
     all: all, where: where, find: find, findOrFail: findOrFail,
     insert: insert, update: update, remove: remove,

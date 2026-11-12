@@ -72,7 +72,7 @@ function boot() {
   call('bootstrap').then(function (b) {
     S.user = b.user; S.settings = b.settings; S.lists = b.lists; S.room_types = b.room_types;
     $('login-view').classList.add('hidden'); $('app-view').classList.remove('hidden');
-    $('hotel-name').textContent = S.settings.hotel_name; $('me-name').textContent = S.user.name; $('me-role').textContent = label(S.user.role);
+    $('hotel-name').textContent = S.settings.hotel_name; setBrandLogo(b.logo);$('me-name').textContent = S.user.name; $('me-role').textContent = label(S.user.role);
     renderNav(); go(S.route === 'login' ? 'dashboard' : S.route, S.params);
   }).catch(function (e) { showLogin(e.message); });
 }
@@ -597,15 +597,76 @@ PAGES.settings = function () {
       '<div class="grid g2">' + f('city', 'City') + f('state', 'State') + f('country', 'Country') + f('postal_code', 'Postal code') + f('phone', 'Phone') + f('email', 'Email', 'email') + '</div>' + f('website', 'Website') + f('gstin', 'GSTIN') + '</div>' +
       '<div><div class="card"><h3>Billing & tax</h3><div class="grid g2">' + f('invoice_prefix', 'Invoice prefix') + f('next_invoice_number', 'Next invoice number', 'number') + f('tax_name', 'Tax name') + f('tax_rate', 'Tax rate %', 'number') + f('currency_symbol', 'Currency symbol') + '<span></span>' + f('default_check_in_time', 'Default check-in', 'time') + f('default_check_out_time', 'Default check-out', 'time') + '</div></div>' +
       '<div class="card"><h3>Bank / UPI (printed on invoice)</h3><div class="grid g2">' + f('bank_name', 'Bank name') + f('bank_account_number', 'Account number') + f('bank_ifsc', 'IFSC') + f('bank_upi_id', 'UPI ID') + '</div></div></div></div>' +
+      '<div class="card"><h3>Logo & signature (printed on invoice)</h3><div class="grid g2">' + imageBox('logo', 'Hotel logo', s.logo) + imageBox('signature', 'Signature / stamp', s.signature) + '</div>' +
+      '<p class="muted small" style="margin:8px 0 0">PNG with transparent background looks best. Images are resized automatically.</p></div>' +
       '<div class="card"><h3>Invoice text</h3><label>Footer message<input name="footer_message" value="' + esc(s.footer_message) + '"></label><label>Terms & conditions<textarea name="terms_and_conditions">' + esc(s.terms_and_conditions) + '</textarea></label>' +
       '<button class="btn primary" type="submit">Save settings</button></div></form>';
     setPage('Hotel settings', html);
+    ['logo', 'signature'].forEach(function (key) {
+      $('img-file-' + key).onchange = function () {
+        var file = this.files[0]; this.value = '';
+        if (!file) return;
+        if (!/^image\//.test(file.type)) return toast('Please choose an image file.', true);
+        resizeImage(file, key === 'logo' ? 600 : 480, key === 'logo' ? 240 : 200).then(function (data) {
+          return call('saveAsset', { key: key, data: data }).then(function () {
+            $('img-prev-' + key).innerHTML = '<img src="' + data + '" alt="">';
+            if (key === 'logo') setBrandLogo(data);
+            toast(label(key) + ' uploaded.');
+          });
+        }).catch(fail);
+      };
+      $('img-del-' + key).onclick = function () {
+        if (!confirmBox('Remove the ' + key + '?')) return;
+        call('saveAsset', { key: key, data: '' }).then(function () {
+          $('img-prev-' + key).innerHTML = '<span class="muted small">No image</span>';
+          if (key === 'logo') setBrandLogo('');
+          toast(label(key) + ' removed.');
+        }).catch(fail);
+      };
+    });
     $('set-form').onsubmit = function (ev) {
       ev.preventDefault(); submitting(ev.target, true);
       call('saveSettings', formData(ev.target)).then(function (ns) { S.settings = ns; $('hotel-name').textContent = ns.hotel_name; toast('Settings saved.'); }).catch(fail).then(function () { submitting(ev.target, false); });
     };
   }).catch(fail);
 };
+
+function imageBox(key, title, src) {
+  return '<div><div class="small b" style="font-weight:600;margin-bottom:6px">' + title + '</div>' +
+    '<div class="img-prev" id="img-prev-' + key + '">' + (src ? '<img src="' + esc(src) + '" alt="">' : '<span class="muted small">No image</span>') + '</div>' +
+    '<div class="row gap-s" style="margin-top:8px"><label class="btn sm" style="margin:0">Upload<input type="file" id="img-file-' + key + '" accept="image/png,image/jpeg,image/gif,image/webp" style="display:none"></label>' +
+    '<button type="button" class="btn sm danger" id="img-del-' + key + '">Remove</button></div></div>';
+}
+/** Shrink an image in the browser so it fits in the sheet (PNG keeps transparency; falls back to JPEG if still big). */
+function resizeImage(file, maxW, maxH) {
+  return new Promise(function (resolve, reject) {
+    var reader = new FileReader();
+    reader.onerror = function () { reject(new Error('Could not read the file.')); };
+    reader.onload = function () {
+      var img = new Image();
+      img.onerror = function () { reject(new Error('This image format is not supported.')); };
+      img.onload = function () {
+        var scale = Math.min(1, maxW / img.width, maxH / img.height);
+        var c = document.createElement('canvas');
+        c.width = Math.max(1, Math.round(img.width * scale)); c.height = Math.max(1, Math.round(img.height * scale));
+        var ctx = c.getContext('2d');
+        ctx.drawImage(img, 0, 0, c.width, c.height);
+        var data = c.toDataURL('image/png');
+        if (data.length > 400000) {
+          ctx.globalCompositeOperation = 'destination-over'; ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
+          data = c.toDataURL('image/jpeg', 0.85);
+        }
+        resolve(data);
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+function setBrandLogo(src) {
+  var el = document.querySelector('.brand span');
+  el.innerHTML = src ? '<img src="' + esc(src) + '" alt="" style="height:28px;max-width:60px;object-fit:contain;background:#fff;border-radius:4px;padding:2px">' : '🏨';
+}
 
 // ============================================================= USERS (admin)
 PAGES.users = function () {
