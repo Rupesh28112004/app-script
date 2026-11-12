@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Invoice <?= inv.invoice_number ?></title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: Arial, Helvetica, sans-serif; color: #1f2937; font-size: 12px; margin: 0; padding: 24px; }
+  .wrap { max-width: 800px; margin: 0 auto; }
+  table { width: 100%; border-collapse: collapse; }
+  .top td { vertical-align: top; }
+  h1 { font-size: 22px; margin: 0 0 4px; color: #1e3a5f; }
+  .muted { color: #6b7280; }
+  .title { font-size: 26px; font-weight: bold; color: #1e3a5f; text-align: right; letter-spacing: 2px; }
+  .badge { display: inline-block; padding: 3px 10px; border-radius: 10px; font-size: 11px; font-weight: bold; text-transform: uppercase; }
+  .paid { background: #dcfce7; color: #166534; } .partially_paid { background: #fef3c7; color: #92400e; } .unpaid { background: #fee2e2; color: #991b1b; }
+  .box { border: 1px solid #e5e7eb; border-radius: 6px; padding: 10px 12px; }
+  .items th { background: #1e3a5f; color: #fff; text-align: left; padding: 8px; font-size: 11px; text-transform: uppercase; }
+  .items td { padding: 8px; border-bottom: 1px solid #e5e7eb; }
+  .r { text-align: right; }
+  .totals td { padding: 5px 8px; }
+  .grand td { font-size: 15px; font-weight: bold; border-top: 2px solid #1e3a5f; color: #1e3a5f; }
+  .small { font-size: 11px; }
+  .sec { margin-top: 18px; }
+</style>
+</head>
+<body>
+<? var h = inv.hotel || {}; var cur = h.currency_symbol || '₹';
+   var money = function (n) { var p = Number(n || 0).toFixed(2).split('.'); return cur + ' ' + p[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',') + '.' + p[1]; };
+   var label = function (s) { return String(s || '').replace(/_/g, ' ').replace(/\b\w/g, function (c) { return c.toUpperCase(); }); }; ?>
+<div class="wrap">
+  <table class="top">
+    <tr>
+      <td style="width:60%">
+        <h1><?= h.hotel_name ?></h1>
+        <div class="muted"><?= h.address ?></div>
+        <div class="muted"><?= [h.city, h.state, h.postal_code].filter(String).join(', ') ?><?= h.country ? ' — ' + h.country : '' ?></div>
+        <div class="muted"><?= [h.phone, h.email, h.website].filter(String).join(' · ') ?></div>
+        <? if (h.gstin) { ?><div><b>GSTIN:</b> <?= h.gstin ?></div><? } ?>
+      </td>
+      <td style="width:40%" class="r">
+        <div class="title">INVOICE</div>
+        <div><b><?= inv.invoice_number ?></b></div>
+        <div class="muted">Date: <?= inv.invoice_date ?></div>
+        <? if (inv.due_date) { ?><div class="muted">Due: <?= inv.due_date ?></div><? } ?>
+        <div style="margin-top:6px"><span class="badge <?= inv.payment_status ?>"><?= label(inv.payment_status) ?></span></div>
+      </td>
+    </tr>
+  </table>
+
+  <table class="sec top">
+    <tr>
+      <td style="width:50%;padding-right:8px">
+        <div class="box">
+          <div class="muted small">BILL TO</div>
+          <b><?= inv.guest.full_name ?></b><br>
+          <?= inv.guest.mobile_number ?><? if (inv.guest.email) { ?> · <?= inv.guest.email ?><? } ?><br>
+          <span class="muted"><?= [inv.guest.address, inv.guest.city, inv.guest.state].filter(String).join(', ') ?></span>
+          <? if (inv.guest.id_type) { ?><br><span class="muted"><?= inv.guest.id_type ?>: <?= inv.guest.id_number_masked ?></span><? } ?>
+        </div>
+      </td>
+      <td style="width:50%;padding-left:8px">
+        <div class="box">
+          <div class="muted small">STAY DETAILS</div>
+          <? if (inv.booking) { var b = inv.booking; ?>
+            Booking: <b><?= b.booking_number ?></b><br>
+            Room: <?= b.room_number ?> (<?= b.room_type ?>)<br>
+            Check-in: <?= b.check_in_at ?><br>
+            Check-out: <?= b.actual_check_out_at || b.expected_check_out_at ?><br>
+            Guests: <?= b.adults_count ?> adult(s)<?= b.children_count ? ', ' + b.children_count + ' child(ren)' : '' ?>
+          <? } else { ?><span class="muted">Walk-in / service invoice</span><? } ?>
+        </div>
+      </td>
+    </tr>
+  </table>
+
+  <table class="items sec">
+    <thead><tr><th>#</th><th>Description</th><th>Category</th><th class="r">Qty</th><th class="r">Rate</th><th class="r">Amount</th></tr></thead>
+    <tbody>
+    <? inv.items.forEach(function (it, i) { ?>
+      <tr>
+        <td><?= i + 1 ?></td><td><?= it.description ?></td><td><?= label(it.category) ?></td>
+        <td class="r"><?= it.quantity ?></td><td class="r"><?= money(it.unit_price) ?></td>
+        <td class="r"><?= it.category === 'discount' ? '- ' : '' ?><?= money(Math.abs(it.total_price)) ?></td>
+      </tr>
+    <? }); ?>
+    </tbody>
+  </table>
+
+  <table class="sec top">
+    <tr>
+      <td style="width:55%;padding-right:12px" class="small">
+        <? if (inv.payments.length) { ?>
+          <b>Payments received</b>
+          <? inv.payments.forEach(function (p) { ?>
+            <div class="muted"><?= p.payment_date ?> — <?= label(p.payment_method) ?> — <?= money(p.amount) ?><?= p.transaction_reference ? ' (Ref: ' + p.transaction_reference + ')' : '' ?></div>
+          <? }); ?>
+        <? } ?>
+        <? if (h.bank_name || h.bank_upi_id) { ?>
+          <div style="margin-top:10px"><b>Bank details</b><br>
+            <? if (h.bank_name) { ?><?= h.bank_name ?> · A/C <?= h.bank_account_number ?> · IFSC <?= h.bank_ifsc ?><br><? } ?>
+            <? if (h.bank_upi_id) { ?>UPI: <?= h.bank_upi_id ?><? } ?>
+          </div>
+        <? } ?>
+        <? if (inv.notes) { ?><div style="margin-top:10px"><b>Notes:</b> <?= inv.notes ?></div><? } ?>
+      </td>
+      <td style="width:45%">
+        <table class="totals">
+          <? if (inv.room_charges) { ?><tr><td>Room charges</td><td class="r"><?= money(inv.room_charges) ?></td></tr><? } ?>
+          <? if (inv.food_charges) { ?><tr><td>Food charges</td><td class="r"><?= money(inv.food_charges) ?></td></tr><? } ?>
+          <? if (inv.service_charges) { ?><tr><td>Service charges</td><td class="r"><?= money(inv.service_charges) ?></td></tr><? } ?>
+          <? if (inv.other_charges) { ?><tr><td>Other charges</td><td class="r"><?= money(inv.other_charges) ?></td></tr><? } ?>
+          <? if (inv.discount_amount) { ?><tr><td>Discount</td><td class="r">- <?= money(inv.discount_amount) ?></td></tr><? } ?>
+          <tr><td><b>Subtotal</b></td><td class="r"><b><?= money(inv.subtotal) ?></b></td></tr>
+          <tr><td><?= inv.tax_name ?> (<?= inv.tax_rate ?>%)</td><td class="r"><?= money(inv.tax_amount) ?></td></tr>
+          <tr class="grand"><td>Grand Total</td><td class="r"><?= money(inv.grand_total) ?></td></tr>
+          <tr><td>Paid</td><td class="r"><?= money(inv.paid_amount) ?></td></tr>
+          <tr><td><b>Balance due</b></td><td class="r"><b><?= money(inv.balance_amount) ?></b></td></tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+
+  <? if (h.terms_and_conditions) { ?>
+    <div class="sec small muted"><b>Terms &amp; Conditions</b><br><?= h.terms_and_conditions ?></div>
+  <? } ?>
+  <table class="sec"><tr>
+    <td class="small muted"><?= h.footer_message ?></td>
+    <td class="r small" style="padding-top:30px">______________________<br>Authorised Signatory</td>
+  </tr></table>
+</div>
+</body>
+</html>

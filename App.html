@@ -1,0 +1,653 @@
+<script>
+/* =====================================================================
+ * Hotel Management — client app (runs in the browser)
+ * ===================================================================== */
+var S = { token: null, user: null, settings: {}, lists: {}, room_types: [], route: 'dashboard', params: {} };
+var $ = function (id) { return document.getElementById(id); };
+
+// ------------------------------------------------------------- storage
+function store(k, v) { try { if (v === undefined) return localStorage.getItem(k); if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) { return null; } }
+
+// ------------------------------------------------------------- server calls
+var pending = 0;
+function call(action, payload) {
+  pending++; $('loader').classList.remove('hidden');
+  return new Promise(function (resolve, reject) {
+    var done = function () { if (--pending <= 0) { pending = 0; $('loader').classList.add('hidden'); } };
+    google.script.run
+      .withSuccessHandler(function (json) {
+        done();
+        var r; try { r = JSON.parse(json); } catch (e) { return reject(new Error('Bad server response')); }
+        if (r.ok) return resolve(r.data);
+        if (r.auth) { S.token = null; store('hm_token', null); showLogin(r.error); }
+        reject(new Error(r.error));
+      })
+      .withFailureHandler(function (err) { done(); reject(err instanceof Error ? err : new Error(String(err))); })
+      .api(action, S.token, payload || {});
+  });
+}
+
+// ------------------------------------------------------------- helpers
+function esc(v) { return String(v === null || v === undefined ? '' : v).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+function money(n) { var p = Number(n || 0).toFixed(2).split('.'); return (S.settings.currency_symbol || '₹') + p[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',') + '.' + p[1]; }
+function label(s) { return String(s || '').replace(/_/g, ' ').replace(/\b\w/g, function (c) { return c.toUpperCase(); }); }
+function pad(n) { return ('0' + n).slice(-2); }
+function ymd(d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
+function dtLocal(d) { return ymd(d) + 'T' + pad(d.getHours()) + ':' + pad(d.getMinutes()); }
+function parseDt(s) { var m = String(s || '').match(/(\d{4})-(\d{2})-(\d{2})[T ]?(\d{2})?:?(\d{2})?/); return m ? new Date(+m[1], +m[2] - 1, +m[3], +(m[4] || 0), +(m[5] || 0)) : null; }
+function fdt(s) { if (!s) return '—'; var d = parseDt(s); if (!d) return esc(s); var mon = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getMonth()]; var h = d.getHours(), ap = h >= 12 ? 'PM' : 'AM'; h = h % 12 || 12; return pad(d.getDate()) + ' ' + mon + ' ' + d.getFullYear() + (String(s).length > 10 ? ', ' + h + ':' + pad(d.getMinutes()) + ' ' + ap : ''); }
+function fd(s) { return s ? fdt(String(s).substring(0, 10)) : '—'; }
+function isAdmin() { return S.user && S.user.role === 'admin'; }
+var BADGE = { available: 'green', paid: 'green', checked_out: 'gray', occupied: 'red', unpaid: 'red', cancelled: 'gray',
+  maintenance: 'gray', cleaning: 'amber', partially_paid: 'amber', checked_in: 'blue', admin: 'blue', receptionist: 'gray' };
+function badge(s) { return '<span class="badge b-' + (BADGE[s] || 'gray') + '">' + esc(label(s)) + '</span>'; }
+function opts(list, sel, blank) { return (blank !== undefined ? '<option value="">' + esc(blank) + '</option>' : '') + list.map(function (o) { var v = typeof o === 'object' ? o.v : o, t = typeof o === 'object' ? o.t : label(o); return '<option value="' + esc(v) + '"' + (String(v) === String(sel) ? ' selected' : '') + '>' + esc(t) + '</option>'; }).join(''); }
+function formData(form) { var o = {}; Array.prototype.forEach.call(form.elements, function (el) { if (!el.name) return; if (el.type === 'checkbox') o[el.name] = el.checked; else if (el.type === 'radio') { if (el.checked) o[el.name] = el.value; } else o[el.name] = el.value; }); return o; }
+function toast(msg, err) { var t = $('toast'); t.textContent = msg; t.className = 'toast' + (err ? ' err' : ''); clearTimeout(t._h); t._h = setTimeout(function () { t.classList.add('hidden'); }, err ? 6000 : 3000); }
+function fail(e) { toast(e.message || String(e), true); }
+function setPage(title, html, actions) { $('page-title').textContent = title; $('page').innerHTML = html; $('page-actions').innerHTML = actions || ''; }
+function table(headers, rows, emptyMsg, foot) {
+  return '<div class="table-wrap"><table class="t"><thead><tr>' + headers.map(function (h) { return '<th' + (/^[>]/.test(h) ? ' class="right"' : '') + '>' + esc(h.replace(/^>/, '')) + '</th>'; }).join('') + '</tr></thead><tbody>' +
+    (rows.length ? rows.join('') : '<tr><td class="empty" colspan="' + headers.length + '">' + esc(emptyMsg || 'No records found.') + '</td></tr>') + '</tbody>' + (foot || '') + '</table></div>';
+}
+function openModal(title, html, wide) { $('modal-title').textContent = title; $('modal-body').innerHTML = html; $('modal-backdrop').classList.remove('hidden'); document.querySelector('.modal').classList.toggle('wide', !!wide); }
+function closeModal() { $('modal-backdrop').classList.add('hidden'); $('modal-body').innerHTML = ''; }
+function confirmBox(msg) { return window.confirm(msg); }
+function debounce(fn, ms) { var h; return function () { var a = arguments; clearTimeout(h); h = setTimeout(function () { fn.apply(null, a); }, ms || 300); }; }
+function submitting(form, on) { Array.prototype.forEach.call(form.querySelectorAll('button[type=submit]'), function (b) { b.disabled = on; }); }
+
+// ------------------------------------------------------------- auth & boot
+function showLogin(msg) {
+  $('app-view').classList.add('hidden'); $('login-view').classList.remove('hidden'); closeModal();
+  var e = $('login-error'); if (msg) { e.textContent = msg; e.classList.remove('hidden'); } else e.classList.add('hidden');
+}
+$('login-form').addEventListener('submit', function (ev) {
+  ev.preventDefault(); var f = ev.target; submitting(f, true);
+  call('login', formData(f)).then(function (r) { S.token = r.token; store('hm_token', r.token); f.reset(); boot(); })
+    .catch(function (e) { showLogin(e.message); }).then(function () { submitting(f, false); });
+});
+function logout() { call('logout').catch(function () {}); S.token = null; store('hm_token', null); showLogin(); }
+
+function boot() {
+  call('bootstrap').then(function (b) {
+    S.user = b.user; S.settings = b.settings; S.lists = b.lists; S.room_types = b.room_types;
+    $('login-view').classList.add('hidden'); $('app-view').classList.remove('hidden');
+    $('hotel-name').textContent = S.settings.hotel_name; $('me-name').textContent = S.user.name; $('me-role').textContent = label(S.user.role);
+    renderNav(); go(S.route === 'login' ? 'dashboard' : S.route, S.params);
+  }).catch(function (e) { showLogin(e.message); });
+}
+
+var NAV = [
+  ['dashboard', '📊', 'Dashboard'], ['rooms', '🛏️', 'Rooms'], ['bookings', '🗓️', 'Check-in / out'], ['guests', '👥', 'Guests'],
+  ['billing', '🧾', 'New Invoice'], ['invoices', '💳', 'Invoices'],
+  ['-', 'Admin'], ['reports', '📈', 'Reports', 1], ['users', '🧑‍💼', 'Staff', 1], ['settings', '⚙️', 'Settings', 1]
+];
+function renderNav() {
+  $('nav').innerHTML = NAV.filter(function (n) { return !n[3] || isAdmin(); }).filter(function (n) { return n[0] !== '-' || isAdmin(); }).map(function (n) {
+    return n[0] === '-' ? '<div class="sep">' + n[1] + '</div>' : '<a data-r="' + n[0] + '" onclick="go(\'' + n[0] + '\')"><span>' + n[1] + '</span>' + n[2] + '</a>';
+  }).join('');
+}
+
+// ------------------------------------------------------------- router
+var PAGES = {};
+function go(route, params) {
+  route = String(route || 'dashboard').replace(/^#/, '');
+  S.route = route; S.params = params || {};
+  store('hm_route', JSON.stringify({ r: route, p: S.params }));
+  Array.prototype.forEach.call(document.querySelectorAll('#nav a'), function (a) { a.classList.toggle('active', a.getAttribute('data-r') === route.split('/')[0]); });
+  $('sidebar').classList.remove('open');
+  window.scrollTo(0, 0);
+  var fn = PAGES[route] || PAGES.dashboard;
+  setPage('', '<div class="muted">Loading…</div>');
+  try { fn(S.params); } catch (e) { fail(e); }
+}
+
+// ============================================================= DASHBOARD
+PAGES.dashboard = function () {
+  call('dashboard').then(function (d) {
+    var s = d.stats;
+    var stat = function (l, v, sub) { return '<div class="stat"><div class="lbl">' + l + '</div><div class="val">' + v + '</div>' + (sub ? '<div class="sub">' + sub + '</div>' : '') + '</div>'; };
+    var html = '<div class="grid g4">' +
+      stat('Occupancy', s.occupancy_rate + '%', s.occupied_rooms + ' of ' + s.total_rooms + ' rooms<div class="bar"><div style="width:' + s.occupancy_rate + '%"></div></div>') +
+      stat('In-house guests', s.in_house, s.today_check_ins + ' check-ins today') +
+      stat("Today's revenue", money(s.today_revenue), 'Total collected ' + money(s.total_revenue)) +
+      stat('Outstanding', money(s.outstanding), s.total_invoices + ' invoices') +
+      '</div><div class="grid g4" style="margin-top:16px">' +
+      stat('Available', s.available_rooms) + stat('Occupied', s.occupied_rooms) + stat('Cleaning', s.cleaning_rooms) + stat('Maintenance', s.maintenance_rooms) +
+      '</div><div class="grid g2" style="margin-top:18px"><div>' +
+      '<div class="card"><h3>⏰ Due for check-out</h3>' + table(['Guest', 'Room', 'Due', ''], d.due_checkouts.map(function (b) {
+        return '<tr><td>' + esc(b.guest_name) + '</td><td>' + esc(b.room_number) + '</td><td>' + fdt(b.expected_check_out_at) + '</td><td class="right"><a onclick="go(\'booking\',{id:' + b.id + '})">Open</a></td></tr>';
+      }), 'No pending check-outs 🎉') + '</div>' +
+      '<div class="card"><h3>Recent bookings</h3>' + table(['Booking', 'Guest', 'Room', 'Status'], d.recent_bookings.map(function (b) {
+        return '<tr><td><a onclick="go(\'booking\',{id:' + b.id + '})">' + esc(b.booking_number) + '</a></td><td>' + esc(b.guest_name) + '</td><td>' + esc(b.room_number) + '</td><td>' + badge(b.status) + '</td></tr>';
+      })) + '</div></div><div>' +
+      '<div class="card"><h3>Recent invoices</h3>' + table(['Invoice', 'Guest', '>Total', 'Status'], d.recent_invoices.map(function (i) {
+        return '<tr><td><a onclick="go(\'invoice\',{id:' + i.id + '})">' + esc(i.invoice_number) + '</a></td><td>' + esc(i.guest_name) + '</td><td class="right">' + money(i.grand_total) + '</td><td>' + badge(i.payment_status) + '</td></tr>';
+      })) + '</div>' +
+      '<div class="card"><h3>Activity</h3><ul class="feed">' + (d.recent_activity.map(function (a) {
+        return '<li>' + esc(a.description) + '<div class="muted small">' + esc(a.user_name) + ' · ' + fdt(a.created_at) + '</div></li>';
+      }).join('') || '<li class="muted">No activity yet.</li>') + '</ul></div></div></div>';
+    setPage('Dashboard', html, '<button class="btn primary" onclick="go(\'checkin\')">＋ Check-in</button><button class="btn" onclick="go(\'billing\')">＋ Invoice</button>');
+  }).catch(fail);
+};
+
+// ============================================================= ROOMS
+PAGES.rooms = function (p) {
+  p = p || {};
+  var view = store('hm_rooms_view') || 'board';
+  call('listRooms', p).then(function (rooms) {
+    var filters = '<div class="filters"><label>Search<input id="f-q" value="' + esc(p.search || '') + '" placeholder="Room no, type, floor"></label>' +
+      '<label>Status<select id="f-st">' + opts(S.lists.room_statuses, p.status, 'All') + '</select></label>' +
+      '<label>Type<select id="f-ty">' + opts(S.room_types, p.room_type, 'All') + '</select></label>' +
+      '<div class="seg"><button class="' + (view === 'board' ? 'on' : '') + '" onclick="store(\'hm_rooms_view\',\'board\');go(\'rooms\',S.params)">Board</button><button class="' + (view === 'list' ? 'on' : '') + '" onclick="store(\'hm_rooms_view\',\'list\');go(\'rooms\',S.params)">List</button></div></div>';
+    var body;
+    if (view === 'board') {
+      body = rooms.length ? '<div class="rooms">' + rooms.map(function (r) {
+        return '<div class="room ' + esc(r.status) + '" onclick="roomDetail(' + r.id + ')"><div class="row between"><span class="no">' + esc(r.room_number) + '</span>' + badge(r.status) + '</div>' +
+          '<div class="muted">' + esc(r.room_type) + ' · Floor ' + esc(r.floor) + '</div><div style="margin-top:6px"><b>' + money(r.price_per_night) + '</b><span class="muted small"> /night</span></div>' +
+          (r.current ? '<div class="small" style="margin-top:6px">👤 ' + esc(r.current.guest_name) + '<br><span class="muted">Out: ' + fdt(r.current.expected_check_out_at) + '</span></div>' : '') + '</div>';
+      }).join('') + '</div>' : '<div class="card empty">No rooms yet. Click “Add room”.</div>';
+    } else {
+      body = '<div class="card">' + table(['Room', 'Type', 'Floor', '>Night', '>Hour', 'Capacity', 'Status', ''], rooms.map(function (r) {
+        return '<tr><td><b>' + esc(r.room_number) + '</b></td><td>' + esc(r.room_type) + '</td><td>' + esc(r.floor) + '</td><td class="right">' + money(r.price_per_night) + '</td><td class="right">' + money(r.price_per_hour) + '</td><td>' + r.capacity_adults + 'A + ' + r.capacity_children + 'C</td><td>' + badge(r.status) + '</td><td class="right nowrap"><button class="btn sm" onclick="roomDetail(' + r.id + ')">View</button> <button class="btn sm" onclick="roomForm(' + r.id + ')">Edit</button></td></tr>';
+      })) + '</div>';
+    }
+    setPage('Rooms (' + rooms.length + ')', filters + body, '<button class="btn primary" onclick="roomForm()">＋ Add room</button>');
+    var refilter = debounce(function () { go('rooms', { search: $('f-q').value, status: $('f-st').value, room_type: $('f-ty').value }); }, 400);
+    $('f-q').addEventListener('input', refilter); $('f-st').onchange = refilter; $('f-ty').onchange = refilter;
+  }).catch(fail);
+};
+
+function roomForm(id) {
+  var render = function (r) {
+    r = r || { status: 'available', floor: '1', capacity_adults: 2, capacity_children: 1, price_per_hour: 0 };
+    openModal(id ? 'Edit room ' + r.room_number : 'Add room',
+      '<form id="room-form"><input type="hidden" name="id" value="' + esc(r.id || '') + '"><div class="grid g2">' +
+      '<label>Room number *<input name="room_number" required value="' + esc(r.room_number || '') + '"></label>' +
+      '<label>Room type *<input name="room_type" required list="room-types" value="' + esc(r.room_type || '') + '" placeholder="Standard, Deluxe, Suite…"><datalist id="room-types">' + S.room_types.map(function (t) { return '<option value="' + esc(t) + '">'; }).join('') + '</datalist></label>' +
+      '<label>Price per night *<input name="price_per_night" type="number" min="0" step="0.01" required value="' + esc(r.price_per_night || '') + '"></label>' +
+      '<label>Price per hour<input name="price_per_hour" type="number" min="0" step="0.01" value="' + esc(r.price_per_hour) + '"></label>' +
+      '<label>Floor<input name="floor" value="' + esc(r.floor) + '"></label>' +
+      '<label>Status<select name="status">' + opts(S.lists.room_statuses, r.status) + '</select></label>' +
+      '<label>Max adults<input name="capacity_adults" type="number" min="1" max="10" value="' + esc(r.capacity_adults) + '"></label>' +
+      '<label>Max children<input name="capacity_children" type="number" min="0" max="10" value="' + esc(r.capacity_children) + '"></label></div>' +
+      '<label>Amenities (comma separated)<input name="amenities" value="' + esc(r.amenities || '') + '" placeholder="WiFi, AC, TV"></label>' +
+      '<label>Description<textarea name="description">' + esc(r.description || '') + '</textarea></label>' +
+      '<div class="modal-foot">' + (id ? '<button type="button" class="btn danger" onclick="deleteRoom(' + id + ')">Delete</button><span class="grow"></span>' : '') +
+      '<button type="button" class="btn" onclick="closeModal()">Cancel</button><button class="btn primary" type="submit">Save room</button></div></form>');
+    $('room-form').onsubmit = function (ev) {
+      ev.preventDefault(); submitting(ev.target, true);
+      call('saveRoom', formData(ev.target)).then(function (room) {
+        if (S.room_types.indexOf(room.room_type) === -1) S.room_types.push(room.room_type);
+        closeModal(); toast('Room ' + room.room_number + ' saved.'); go('rooms', S.params);
+      }).catch(fail).then(function () { submitting(ev.target, false); });
+    };
+  };
+  if (id) call('getRoom', { id: id }).then(render).catch(fail); else render();
+}
+function deleteRoom(id) {
+  if (!confirmBox('Delete this room permanently?')) return;
+  call('deleteRoom', { id: id }).then(function () { closeModal(); toast('Room deleted.'); go('rooms', S.params); }).catch(fail);
+}
+function roomDetail(id) {
+  call('getRoom', { id: id }).then(function (r) {
+    openModal('Room ' + r.room_number,
+      '<div class="row between wrap gap"><div><div class="muted">' + esc(r.room_type) + ' · Floor ' + esc(r.floor) + '</div><div style="font-size:18px;font-weight:700">' + money(r.price_per_night) + ' <span class="muted small">/night</span> · ' + money(r.price_per_hour) + ' <span class="muted small">/hour</span></div></div>' + badge(r.status) + '</div>' +
+      (r.amenities ? '<p class="muted">✨ ' + esc(r.amenities) + '</p>' : '') + (r.description ? '<p>' + esc(r.description) + '</p>' : '') +
+      '<div class="row gap-s wrap" style="margin:12px 0"><span class="small muted">Set status:</span>' + S.lists.room_statuses.map(function (s) {
+        return '<button class="btn sm' + (s === r.status ? ' primary' : '') + '" onclick="setRoomStatus(' + r.id + ',\'' + s + '\')">' + label(s) + '</button>';
+      }).join('') + '</div>' +
+      (r.status === 'available' ? '<button class="btn success" onclick="closeModal();go(\'checkin\',{room_id:' + r.id + '})">＋ Check-in to this room</button> ' : '') +
+      '<button class="btn" onclick="roomForm(' + r.id + ')">Edit room</button>' +
+      '<h4 style="margin:18px 0 6px">Recent stays</h4>' + table(['Booking', 'Guest', 'Check-in', 'Status'], r.bookings.map(function (b) {
+        return '<tr><td><a onclick="closeModal();go(\'booking\',{id:' + b.id + '})">' + esc(b.booking_number) + '</a></td><td>' + esc(b.guest_name) + '</td><td>' + fdt(b.check_in_at) + '</td><td>' + badge(b.status) + '</td></tr>';
+      }), 'No stays yet.'));
+  }).catch(fail);
+}
+function setRoomStatus(id, status) {
+  call('setRoomStatus', { id: id, status: status }).then(function () { toast('Room status updated.'); closeModal(); go(S.route, S.params); }).catch(fail);
+}
+
+// ============================================================= GUESTS
+PAGES.guests = function (p) {
+  p = p || {};
+  call('listGuests', p).then(function (list) {
+    var html = '<div class="filters"><label class="grow">Search<input id="f-q" value="' + esc(p.search || '') + '" placeholder="Name, mobile, email, city"></label></div><div class="card">' +
+      table(['Name', 'Mobile', 'Email', 'City', 'ID', 'Visits', ''], list.map(function (g) {
+        return '<tr><td><a onclick="go(\'guest\',{id:' + g.id + '})"><b>' + esc(g.full_name) + '</b></a></td><td>' + esc(g.mobile_number) + '</td><td>' + esc(g.email) + '</td><td>' + esc(g.city) + '</td><td class="small">' + esc(g.id_type) + ' ' + esc(g.id_number_masked) + '</td><td>' + g.total_visits + '</td><td class="right nowrap"><button class="btn sm" onclick="guestForm(' + g.id + ')">Edit</button> <button class="btn sm success" onclick="go(\'checkin\',{guest_id:' + g.id + '})">Check-in</button></td></tr>';
+      }), 'No guests found.') + '</div>';
+    setPage('Guests (' + list.length + ')', html, '<button class="btn primary" onclick="guestForm()">＋ Add guest</button>');
+    $('f-q').addEventListener('input', debounce(function () { go('guests', { search: $('f-q').value }); }, 400));
+    $('f-q').focus(); var v = $('f-q').value; $('f-q').setSelectionRange(v.length, v.length);
+  }).catch(fail);
+};
+
+function guestFields(g, prefix) {
+  g = g || { country: 'India' }; prefix = prefix || '';
+  return '<div class="grid g2">' +
+    '<label>Full name *<input name="' + prefix + 'full_name" required value="' + esc(g.full_name || '') + '"></label>' +
+    '<label>Mobile number *<input name="' + prefix + 'mobile_number" required value="' + esc(g.mobile_number || '') + '"></label>' +
+    '<label>Email<input name="' + prefix + 'email" type="email" value="' + esc(g.email || '') + '"></label>' +
+    '<label>ID type<select name="' + prefix + 'id_type">' + opts(S.lists.id_types.map(function (t) { return { v: t, t: t }; }), g.id_type, '—') + '</select></label>' +
+    '<label>ID number' + (g.id_number_masked ? ' <span class="muted">(saved: ' + esc(g.id_number_masked) + ')</span>' : '') + '<input name="' + prefix + 'id_number" placeholder="' + (g.id ? 'Leave blank to keep' : 'Only last 4 digits are stored') + '"></label>' +
+    '<label>City<input name="' + prefix + 'city" value="' + esc(g.city || '') + '"></label>' +
+    '<label>State<input name="' + prefix + 'state" value="' + esc(g.state || '') + '"></label>' +
+    '<label>Country<input name="' + prefix + 'country" value="' + esc(g.country || 'India') + '"></label></div>' +
+    '<label>Address<input name="' + prefix + 'address" value="' + esc(g.address || '') + '"></label>' +
+    (prefix ? '' : '<div class="grid g2"><label>Postal code<input name="postal_code" value="' + esc(g.postal_code || '') + '"></label><span></span></div><label>Notes<textarea name="notes">' + esc(g.notes || '') + '</textarea></label>');
+}
+function guestForm(id) {
+  var render = function (g) {
+    openModal(id ? 'Edit guest' : 'Add guest', '<form id="guest-form"><input type="hidden" name="id" value="' + esc(id || '') + '">' + guestFields(g) +
+      '<div class="modal-foot"><button type="button" class="btn" onclick="closeModal()">Cancel</button><button class="btn primary" type="submit">Save guest</button></div></form>');
+    $('guest-form').onsubmit = function (ev) {
+      ev.preventDefault(); submitting(ev.target, true);
+      call('saveGuest', formData(ev.target)).then(function (gg) { closeModal(); toast('Guest saved.'); go(S.route === 'guest' ? 'guest' : 'guests', S.route === 'guest' ? { id: gg.id } : S.params); })
+        .catch(fail).then(function () { submitting(ev.target, false); });
+    };
+  };
+  if (id) call('getGuest', { id: id }).then(render).catch(fail); else render();
+}
+PAGES.guest = function (p) {
+  call('getGuest', p).then(function (g) {
+    var html = '<div class="grid g3"><div class="stat"><div class="lbl">Visits</div><div class="val">' + g.total_visits + '</div></div><div class="stat"><div class="lbl">Total billed</div><div class="val">' + money(g.total_billed) + '</div></div><div class="stat"><div class="lbl">Total paid</div><div class="val">' + money(g.total_paid) + '</div></div></div>' +
+      '<div class="grid g2" style="margin-top:16px"><div class="card"><h3>Details</h3><dl class="kv">' +
+      [['Mobile', g.mobile_number], ['Email', g.email], ['ID', (g.id_type || '') + ' ' + (g.id_number_masked || '')], ['Address', [g.address, g.city, g.state, g.postal_code, g.country].filter(String).join(', ')], ['Notes', g.notes], ['Registered', fdt(g.created_at)]]
+        .map(function (r) { return '<dt>' + r[0] + '</dt><dd>' + (r[0] === 'Registered' ? r[1] : esc(r[1]) || '—') + '</dd>'; }).join('') + '</dl></div>' +
+      '<div class="card"><h3>Invoices</h3>' + table(['Invoice', 'Date', '>Total', 'Status'], g.invoices.map(function (i) {
+        return '<tr><td><a onclick="go(\'invoice\',{id:' + i.id + '})">' + esc(i.invoice_number) + '</a></td><td>' + fd(i.invoice_date) + '</td><td class="right">' + money(i.grand_total) + '</td><td>' + badge(i.payment_status) + '</td></tr>';
+      }), 'No invoices.') + '</div></div>' +
+      '<div class="card"><h3>Stay history</h3>' + table(['Booking', 'Room', 'Check-in', 'Check-out', 'Status'], g.bookings.map(function (b) {
+        return '<tr><td><a onclick="go(\'booking\',{id:' + b.id + '})">' + esc(b.booking_number) + '</a></td><td>' + esc(b.room_number) + '</td><td>' + fdt(b.check_in_at) + '</td><td>' + fdt(b.actual_check_out_at || b.expected_check_out_at) + '</td><td>' + badge(b.status) + '</td></tr>';
+      }), 'No stays yet.') + '</div>';
+    setPage(g.full_name, html, '<button class="btn" onclick="go(\'guests\')">← Guests</button><button class="btn" onclick="guestForm(' + g.id + ')">Edit</button>' +
+      (g.bookings.length || g.invoices.length ? '' : '<button class="btn danger" onclick="deleteGuest(' + g.id + ')">Delete</button>') +
+      '<button class="btn success" onclick="go(\'checkin\',{guest_id:' + g.id + '})">Check-in</button>');
+  }).catch(fail);
+};
+function deleteGuest(id) {
+  if (!confirmBox('Delete this guest?')) return;
+  call('deleteGuest', { id: id }).then(function () { toast('Guest deleted.'); go('guests'); }).catch(fail);
+}
+
+// ============================================================= BOOKINGS
+PAGES.bookings = function (p) {
+  p = p || {}; if (p.status === undefined) p.status = 'checked_in';
+  call('listBookings', p).then(function (list) {
+    var tabs = [['checked_in', 'In-house'], ['checked_out', 'Checked out'], ['cancelled', 'Cancelled'], ['', 'All']];
+    var html = '<div class="tabs">' + tabs.map(function (t) { return '<a class="' + (p.status === t[0] ? 'active' : '') + '" onclick="go(\'bookings\',{status:\'' + t[0] + '\',search:S.params.search||\'\'})">' + t[1] + '</a>'; }).join('') + '</div>' +
+      '<div class="filters"><label class="grow">Search<input id="f-q" value="' + esc(p.search || '') + '" placeholder="Booking no, guest, mobile, room"></label><label>Check-in date<input id="f-d" type="date" value="' + esc(p.date || '') + '"></label></div>' +
+      '<div class="card">' + table(['Booking', 'Guest', 'Room', 'Check-in', 'Expected out', '>Charge', 'Status', ''], list.map(function (b) {
+        return '<tr><td><a onclick="go(\'booking\',{id:' + b.id + '})"><b>' + esc(b.booking_number) + '</b></a></td><td>' + esc(b.guest_name) + '<div class="muted small">' + esc(b.guest_mobile) + '</div></td><td>' + esc(b.room_number) + '<div class="muted small">' + esc(b.room_type) + '</div></td><td>' + fdt(b.check_in_at) + '</td><td>' + fdt(b.actual_check_out_at || b.expected_check_out_at) + '</td><td class="right">' + money(b.total_charge) + '</td><td>' + badge(b.status) + (b.invoice_number ? '<div style="margin-top:3px">' + badge(b.payment_status) + '</div>' : '') + '</td>' +
+          '<td class="right nowrap">' + (b.status === 'checked_in' ? '<button class="btn sm" onclick="checkoutFlow(' + b.id + ')">Check-out</button> ' : '') + '<button class="btn sm" onclick="go(\'booking\',{id:' + b.id + '})">Open</button></td></tr>';
+      }), 'No bookings.') + '</div>';
+    setPage('Check-in / Check-out', html, '<button class="btn primary" onclick="go(\'checkin\')">＋ New check-in</button>');
+    var refilter = debounce(function () { go('bookings', { status: p.status, search: $('f-q').value, date: $('f-d').value }); }, 400);
+    $('f-q').addEventListener('input', refilter); $('f-d').onchange = refilter;
+  }).catch(fail);
+};
+
+PAGES.booking = function (p) {
+  call('getBooking', p).then(function (b) {
+    var g = b.guest || {}, unit = b.billing_type === 'hourly' ? 'hour(s)' : 'night(s)';
+    var html = '<div class="grid g2"><div class="card"><div class="row between"><h3>Stay</h3>' + badge(b.status) + '</div><dl class="kv">' +
+      '<dt>Room</dt><dd>' + esc(b.room_number) + ' — ' + esc(b.room_type) + '</dd>' +
+      '<dt>Check-in</dt><dd>' + fdt(b.check_in_at) + '</dd><dt>Expected out</dt><dd>' + fdt(b.expected_check_out_at) + '</dd>' +
+      '<dt>Actual out</dt><dd>' + fdt(b.actual_check_out_at) + '</dd><dt>Guests</dt><dd>' + b.adults_count + ' adult(s), ' + b.children_count + ' child(ren)</dd>' +
+      '<dt>Billing</dt><dd>' + b.units_booked + ' ' + unit + ' × ' + money(b.rate_applied) + ' = <b>' + money(b.total_charge) + '</b></dd>' +
+      '<dt>Notes</dt><dd>' + (esc(b.special_notes) || '—') + '</dd></dl></div>' +
+      '<div class="card"><h3>Guest</h3><dl class="kv"><dt>Name</dt><dd><a onclick="go(\'guest\',{id:' + g.id + '})">' + esc(g.full_name) + '</a></dd><dt>Mobile</dt><dd>' + esc(g.mobile_number) + '</dd><dt>Email</dt><dd>' + (esc(g.email) || '—') + '</dd><dt>ID</dt><dd>' + esc(g.id_type) + ' ' + esc(g.id_number_masked) + '</dd><dt>Visits</dt><dd>' + g.total_visits + '</dd></dl>' +
+      '<h3 style="margin-top:18px">Invoice</h3>' + (b.invoice_id ? '<a onclick="go(\'invoice\',{id:' + b.invoice_id + '})"><b>' + esc(b.invoice_number) + '</b></a> ' + badge(b.payment_status) : '<span class="muted">Not generated yet.</span>') + '</div></div>';
+    var actions = '<button class="btn" onclick="go(\'bookings\')">← Bookings</button>';
+    if (!b.invoice_id && b.status !== 'cancelled') actions += '<button class="btn accent" onclick="go(\'billing\',{booking_id:' + b.id + '})">🧾 Generate invoice</button>';
+    if (b.status === 'checked_in') actions += '<button class="btn danger" onclick="cancelBooking(' + b.id + ')">Cancel</button><button class="btn primary" onclick="checkoutFlow(' + b.id + ')">Check-out</button>';
+    setPage('Booking ' + b.booking_number, html, actions);
+  }).catch(fail);
+};
+
+function checkoutFlow(id) {
+  openModal('Check-out', '<form id="co-form"><label>Actual check-out time<input type="datetime-local" name="actual_check_out_at" value="' + dtLocal(new Date()) + '" required></label>' +
+    '<label>Room after check-out<select name="room_status"><option value="cleaning">Needs cleaning</option><option value="available">Available immediately</option></select></label>' +
+    '<div class="alert info">Tip: generate the invoice first, or use “Generate invoice” afterwards from the booking page.</div>' +
+    '<div class="modal-foot"><button type="button" class="btn" onclick="closeModal()">Cancel</button><button class="btn primary" type="submit">Confirm check-out</button></div></form>');
+  $('co-form').onsubmit = function (ev) {
+    ev.preventDefault(); var d = formData(ev.target); d.id = id; submitting(ev.target, true);
+    call('checkOut', d).then(function () { closeModal(); toast('Guest checked out.'); go('booking', { id: id }); }).catch(fail).then(function () { submitting(ev.target, false); });
+  };
+}
+function cancelBooking(id) {
+  if (!confirmBox('Cancel this booking? The room will be released.')) return;
+  call('cancelBooking', { id: id }).then(function () { toast('Booking cancelled.'); go('booking', { id: id }); }).catch(fail);
+}
+
+// ------------------------------------------------------------- check-in form
+PAGES.checkin = function (p) {
+  p = p || {};
+  Promise.all([call('listRooms', {}), call('listGuests', {})]).then(function (res) {
+    var rooms = res[0], guests = res[1];
+    var now = new Date(); now.setSeconds(0, 0);
+    var out = new Date(now.getTime() + 86400000);
+    var t = String(S.settings.default_check_out_time || '11:00').split(':'); out.setHours(+t[0] || 11, +t[1] || 0);
+    var roomOpt = function (all) {
+      return '<option value="">— Select room —</option>' + rooms.filter(function (r) { return all || r.status === 'available' || String(r.id) === String(p.room_id); }).map(function (r) {
+        return '<option value="' + r.id + '"' + (String(r.id) === String(p.room_id) ? ' selected' : '') + '>' + esc(r.room_number + ' — ' + r.room_type + ' — ' + money(r.price_per_night) + '/night' + (r.status !== 'available' ? ' [' + label(r.status) + ']' : '')) + '</option>';
+      }).join('');
+    };
+    var html = '<form id="ci-form"><div class="grid g2"><div>' +
+      '<div class="card"><h3>1. Guest</h3><div class="seg" style="margin-bottom:12px"><button type="button" id="gm-ex" class="' + (guests.length ? 'on' : '') + '">Existing guest</button><button type="button" id="gm-new" class="' + (guests.length ? '' : 'on') + '">New guest</button></div>' +
+      '<div id="g-existing"><label>Search guest<input id="g-search" placeholder="Type name or mobile…"></label><label>Guest<select name="guest_id" id="g-select">' + guestOptions(guests, p.guest_id) + '</select></label></div>' +
+      '<div id="g-new" class="hidden">' + guestFields(null, 'ng_') + '</div></div>' +
+      '<div class="card"><h3>3. Notes</h3><label>Special requests / notes<textarea name="special_notes"></textarea></label></div></div><div>' +
+      '<div class="card"><h3>2. Room & stay</h3>' +
+      '<label>Room *<select name="room_id" id="ci-room" required>' + roomOpt(false) + '</select></label>' +
+      '<label class="row gap-s" style="font-weight:400"><input type="checkbox" id="show-all" style="width:auto;margin:0"> Show all rooms (incl. occupied)</label>' +
+      '<div class="row gap-s" style="margin-bottom:12px"><span class="small muted">Billing:</span><div class="seg"><button type="button" class="on" data-bt="nightly">Nightly</button><button type="button" data-bt="hourly">Hourly</button></div></div><input type="hidden" name="billing_type" value="nightly">' +
+      '<div class="grid g2"><label>Check-in *<input type="datetime-local" name="check_in_at" required value="' + dtLocal(now) + '"></label>' +
+      '<label>Expected check-out *<input type="datetime-local" name="expected_check_out_at" required value="' + dtLocal(out) + '"></label>' +
+      '<label>Adults<input type="number" name="adults_count" min="1" max="10" value="1"></label><label>Children<input type="number" name="children_count" min="0" max="10" value="0"></label></div>' +
+      '<label class="row gap-s" style="font-weight:400"><input type="checkbox" name="is_manual" id="ci-manual" style="width:auto;margin:0"> Manual pricing (override rate / duration / total)</label>' +
+      '<div id="ci-manual-box" class="grid g3 hidden"><label>Duration<input type="number" step="0.01" min="0" name="custom_duration"></label><label>Rate<input type="number" step="0.01" min="0" name="custom_rate"></label><label>Total<input type="number" step="0.01" min="0" name="custom_total"></label></div>' +
+      '<div id="ci-est" class="alert info">Select a room to see the estimate.</div></div>' +
+      '<button class="btn primary block" type="submit" style="padding:12px">✔ Confirm check-in</button></div></div></form>';
+    setPage('New check-in', html, '<button class="btn" onclick="go(\'bookings\')">← Bookings</button>');
+
+    var f = $('ci-form'), mode = guests.length ? 'existing' : 'new';
+    var setMode = function (m) {
+      mode = m; $('gm-ex').classList.toggle('on', m === 'existing'); $('gm-new').classList.toggle('on', m === 'new');
+      $('g-existing').classList.toggle('hidden', m !== 'existing'); $('g-new').classList.toggle('hidden', m !== 'new');
+      f.querySelector('[name=ng_full_name]').required = m === 'new'; f.querySelector('[name=ng_mobile_number]').required = m === 'new';
+    };
+    $('gm-ex').onclick = function () { setMode('existing'); }; $('gm-new').onclick = function () { setMode('new'); }; setMode(mode);
+    $('g-search').addEventListener('input', function () {
+      var q = this.value.toLowerCase();
+      $('g-select').innerHTML = guestOptions(guests.filter(function (g) { return !q || (g.full_name + ' ' + g.mobile_number).toLowerCase().indexOf(q) !== -1; }));
+    });
+    $('show-all').onchange = function () { var v = $('ci-room').value; $('ci-room').innerHTML = roomOpt(this.checked); $('ci-room').value = v; estimate(); };
+    Array.prototype.forEach.call(f.querySelectorAll('[data-bt]'), function (b) {
+      b.onclick = function () { f.querySelectorAll('[data-bt]').forEach(function (x) { x.classList.toggle('on', x === b); }); f.billing_type.value = b.getAttribute('data-bt'); estimate(); };
+    });
+    $('ci-manual').onchange = function () { $('ci-manual-box').classList.toggle('hidden', !this.checked); estimate(); };
+
+    function estimate() {
+      var room = rooms.filter(function (r) { return String(r.id) === f.room_id.value; })[0];
+      var box = $('ci-est');
+      if (!room) { box.className = 'alert info'; box.textContent = 'Select a room to see the estimate.'; return; }
+      var a = parseDt(f.check_in_at.value), b = parseDt(f.expected_check_out_at.value);
+      if (!a || !b || b <= a) { box.className = 'alert error'; box.textContent = 'Check-out must be after check-in.'; return; }
+      var hourly = f.billing_type.value === 'hourly', units, rate;
+      if (hourly) { units = Math.round(Math.max(60, Math.floor((b - a) / 60000)) / 60 * 100) / 100; rate = room.price_per_hour > 0 ? room.price_per_hour : room.price_per_night / 24; }
+      else { units = Math.max(1, Math.round((new Date(b.getFullYear(), b.getMonth(), b.getDate()) - new Date(a.getFullYear(), a.getMonth(), a.getDate())) / 86400000)); rate = room.price_per_night; }
+      if (f.is_manual.checked) {
+        if (+f.custom_duration.value > 0) units = +f.custom_duration.value;
+        if (+f.custom_rate.value > 0) rate = +f.custom_rate.value;
+      }
+      var total = f.is_manual.checked && +f.custom_total.value > 0 ? +f.custom_total.value : units * rate;
+      var warn = room.status !== 'available' && !f.is_manual.checked ? '<div class="small" style="margin-top:4px">⚠ Room is ' + esc(room.status) + ' — tick manual pricing to force assign.</div>' : '';
+      box.className = 'alert ' + (warn ? 'warn' : 'info');
+      box.innerHTML = '<b>Estimate:</b> ' + units + ' ' + (hourly ? 'hour(s)' : 'night(s)') + ' × ' + money(rate) + ' = <b>' + money(total) + '</b> <span class="muted small">(before tax)</span>' + warn;
+    }
+    ['room_id', 'check_in_at', 'expected_check_out_at', 'custom_duration', 'custom_rate', 'custom_total'].forEach(function (n) { f[n].addEventListener('input', estimate); f[n].addEventListener('change', estimate); });
+    estimate();
+
+    f.onsubmit = function (ev) {
+      ev.preventDefault();
+      var d = formData(f);
+      if (mode === 'new') {
+        d.guest_id = ''; d.new_guest = {};
+        Object.keys(d).forEach(function (k) { if (k.indexOf('ng_') === 0) { d.new_guest[k.substring(3)] = d[k]; delete d[k]; } });
+      } else if (!d.guest_id) return toast('Please select a guest.', true);
+      submitting(f, true);
+      call('checkIn', d).then(function (b) { toast('Checked in — ' + b.booking_number); go('booking', { id: b.id }); })
+        .catch(fail).then(function () { submitting(f, false); });
+    };
+  }).catch(fail);
+};
+function guestOptions(list, sel) {
+  return '<option value="">— Select guest —</option>' + list.slice(0, 300).map(function (g) {
+    return '<option value="' + g.id + '"' + (String(g.id) === String(sel) ? ' selected' : '') + '>' + esc(g.full_name + ' — ' + g.mobile_number) + '</option>';
+  }).join('');
+}
+
+// ============================================================= BILLING (create invoice)
+PAGES.billing = function (p) {
+  p = p || {};
+  Promise.all([call('billingPrefill', { booking_id: p.booking_id || '' }), call('listGuests', {})]).then(function (res) {
+    var pre = res[0], guests = res[1], st = pre.settings;
+    var items = pre.items.length ? pre.items : [{ description: '', category: 'room', quantity: 1, unit_price: '' }];
+    var b = pre.booking;
+    var html = '<form id="inv-form"><div class="grid g2"><div class="card"><h3>Bill to</h3>' +
+      '<label>Booking<select name="booking_id" id="inv-booking">' + opts(pre.open_bookings.map(function (o) { return { v: o.id, t: o.label }; }).concat(b ? [{ v: b.id, t: b.booking_number + ' — ' + b.guest_name }] : []).filter(function (o, i, a) { return a.findIndex(function (x) { return String(x.v) === String(o.v); }) === i; }), b ? b.id : '', '— No booking (walk-in / services) —') + '</select></label>' +
+      '<div id="inv-guest-box" class="' + (b ? 'hidden' : '') + '"><label>Guest *<select name="guest_id">' + guestOptions(guests, p.guest_id) + '</select></label></div>' +
+      (b ? '<div class="alert info">' + esc(b.guest_name) + ' · Room ' + esc(b.room_number) + ' · ' + fdt(b.check_in_at) + ' → ' + fdt(b.actual_check_out_at || b.expected_check_out_at) + '</div>' : '') +
+      '</div><div class="card"><h3>Invoice details</h3><div class="grid g2">' +
+      '<label>Invoice date<input type="date" name="invoice_date" value="' + ymd(new Date()) + '"></label><label>Due date<input type="date" name="due_date" value="' + ymd(new Date()) + '"></label>' +
+      '<label>Tax name<input name="tax_name" value="' + esc(st.tax_name) + '"></label><label>Tax rate %<input type="number" step="0.01" min="0" max="100" name="tax_rate" id="inv-tax" value="' + esc(st.tax_rate) + '"></label></div></div></div>' +
+      '<div class="card"><div class="row between"><h3>Items</h3><div class="row gap-s wrap">' +
+      [['🍽 Food', 'food'], ['🧺 Service', 'service'], ['➕ Other', 'other'], ['🏷 Discount', 'discount']].map(function (q) { return '<button type="button" class="btn sm" onclick="addItem({category:\'' + q[1] + '\'})">' + q[0] + '</button>'; }).join('') +
+      '</div></div><div class="table-wrap"><table class="t items-table"><thead><tr><th style="min-width:220px">Description</th><th>Category</th><th style="width:90px">Qty</th><th style="width:120px">Rate</th><th class="right" style="width:120px">Amount</th><th></th></tr></thead><tbody id="items"></tbody></table></div>' +
+      '<button type="button" class="btn sm" style="margin-top:10px" onclick="addItem({})">＋ Add line</button>' +
+      '<div class="totals-box" id="inv-totals"></div></div>' +
+      '<div class="card"><h3>Payment</h3><div class="grid g3"><label>Payment method<select name="primary_payment_method">' + opts(S.lists.payment_methods, 'cash') + '</select></label>' +
+      '<label>Amount received now<input type="number" step="0.01" min="0" name="initial_payment_amount" id="inv-pay" placeholder="0.00"></label><label>Reference / UTR<input name="payment_reference"></label></div>' +
+      '<label>Invoice notes<textarea name="notes"></textarea></label>' +
+      (b && b.status === 'checked_in' ? '<label class="row gap-s" style="font-weight:400"><input type="checkbox" name="checkout_after" checked style="width:auto;margin:0"> Check out guest after creating invoice</label>' : '') +
+      '<button class="btn primary block" type="submit" style="padding:12px">🧾 Create invoice</button></div></form>';
+    setPage('New invoice', html, '<button class="btn" onclick="go(\'invoices\')">← Invoices</button>');
+    $('items').innerHTML = ''; items.forEach(addItem);
+    $('inv-booking').onchange = function () { go('billing', this.value ? { booking_id: this.value } : {}); };
+    $('inv-tax').addEventListener('input', calcInvoice);
+    $('inv-pay').addEventListener('input', calcInvoice);
+    $('inv-form').onsubmit = function (ev) {
+      ev.preventDefault(); var f = ev.target, d = formData(f);
+      d.items = Array.prototype.map.call($('items').querySelectorAll('tr'), function (tr) {
+        return { description: tr.querySelector('[data-k=description]').value, category: tr.querySelector('[data-k=category]').value, quantity: tr.querySelector('[data-k=quantity]').value, unit_price: tr.querySelector('[data-k=unit_price]').value };
+      });
+      Object.keys(d).forEach(function (k) { if (k.indexOf('it_') === 0) delete d[k]; });
+      submitting(f, true);
+      call('createInvoice', d).then(function (inv) { toast('Invoice ' + inv.invoice_number + ' created.'); go('invoice', { id: inv.id }); })
+        .catch(fail).then(function () { submitting(f, false); });
+    };
+    calcInvoice();
+  }).catch(function (e) { fail(e); if (S.params.booking_id) go('billing', {}); });
+};
+function addItem(it) {
+  it = it || {};
+  var tr = document.createElement('tr');
+  var placeholder = { food: 'Restaurant / room service', service: 'Laundry, spa, pickup…', discount: 'Discount', other: 'Extra bed, misc…', room: 'Room charges' }[it.category || 'room'];
+  tr.innerHTML = '<td><input data-k="description" name="it_d" value="' + esc(it.description || '') + '" placeholder="' + esc(placeholder) + '"></td>' +
+    '<td><select data-k="category" name="it_c">' + opts(S.lists.item_categories, it.category || 'room') + '</select></td>' +
+    '<td><input data-k="quantity" name="it_q" type="number" step="0.01" min="0.01" value="' + esc(it.quantity || 1) + '"></td>' +
+    '<td><input data-k="unit_price" name="it_p" type="number" step="0.01" min="0" value="' + esc(it.unit_price) + '"></td>' +
+    '<td class="right amt"></td><td><button type="button" class="btn sm danger" title="Remove">✕</button></td>';
+  tr.querySelector('button').onclick = function () { tr.remove(); calcInvoice(); };
+  tr.addEventListener('input', calcInvoice); tr.addEventListener('change', calcInvoice);
+  $('items').appendChild(tr);
+  if (it.category && !it.description) tr.querySelector('input').focus();
+  calcInvoice();
+}
+function calcInvoice() {
+  if (!$('items')) return;
+  var t = { room: 0, food: 0, service: 0, other: 0, discount: 0 };
+  Array.prototype.forEach.call($('items').querySelectorAll('tr'), function (tr) {
+    var q = +tr.querySelector('[data-k=quantity]').value || 0, p = +tr.querySelector('[data-k=unit_price]').value || 0, c = tr.querySelector('[data-k=category]').value;
+    var amt = Math.round(q * p * 100) / 100;
+    tr.querySelector('.amt').textContent = (c === 'discount' ? '- ' : '') + money(Math.abs(amt));
+    if (c === 'discount') t.discount += Math.abs(amt); else t[c] = (t[c] || 0) + amt;
+  });
+  var sub = Math.max(0, t.room + t.food + t.service + t.other - t.discount);
+  var rate = +$('inv-tax').value || 0, tax = Math.round(sub * rate) / 100, grand = Math.round((sub + tax) * 100) / 100;
+  var paid = +($('inv-pay') && $('inv-pay').value) || 0;
+  var line = function (l, v, cls) { return '<div class="row ' + (cls || '') + '"><span>' + l + '</span><span>' + v + '</span></div>'; };
+  $('inv-totals').innerHTML = (t.room ? line('Room', money(t.room)) : '') + (t.food ? line('Food', money(t.food)) : '') + (t.service ? line('Service', money(t.service)) : '') + (t.other ? line('Other', money(t.other)) : '') +
+    (t.discount ? line('Discount', '- ' + money(t.discount)) : '') + line('<b>Subtotal</b>', '<b>' + money(sub) + '</b>') + line('Tax (' + rate + '%)', money(tax)) + line('Grand total', money(grand), 'grand') +
+    (paid ? line('Paying now', money(paid)) + line('Balance', money(Math.max(0, grand - paid))) : '');
+}
+
+// ============================================================= INVOICES
+PAGES.invoices = function (p) {
+  p = p || {};
+  call('listInvoices', p).then(function (list) {
+    var sum = function (f) { return list.reduce(function (s, i) { return s + i[f]; }, 0); };
+    var html = '<div class="filters"><label class="grow">Search<input id="f-q" value="' + esc(p.search || '') + '" placeholder="Invoice no or guest"></label>' +
+      '<label>Status<select id="f-st">' + opts(['paid', 'partially_paid', 'unpaid'], p.payment_status, 'All') + '</select></label>' +
+      '<label>From<input type="date" id="f-from" value="' + esc(p.date_from || '') + '"></label><label>To<input type="date" id="f-to" value="' + esc(p.date_to || '') + '"></label></div>' +
+      '<div class="card">' + table(['Invoice', 'Date', 'Guest', '>Total', '>Paid', '>Balance', 'Status', ''], list.map(function (i) {
+        return '<tr><td><a onclick="go(\'invoice\',{id:' + i.id + '})"><b>' + esc(i.invoice_number) + '</b></a></td><td>' + fd(i.invoice_date) + '</td><td>' + esc(i.guest_name) + '</td><td class="right">' + money(i.grand_total) + '</td><td class="right">' + money(i.paid_amount) + '</td><td class="right">' + money(i.balance_amount) + '</td><td>' + badge(i.payment_status) + '</td><td class="right"><button class="btn sm" onclick="go(\'invoice\',{id:' + i.id + '})">Open</button></td></tr>';
+      }), 'No invoices.', list.length ? '<tfoot><tr><td colspan="3">Total (' + list.length + ')</td><td class="right">' + money(sum('grand_total')) + '</td><td class="right">' + money(sum('paid_amount')) + '</td><td class="right">' + money(sum('balance_amount')) + '</td><td colspan="2"></td></tr></tfoot>' : '') + '</div>';
+    setPage('Invoices', html, '<button class="btn primary" onclick="go(\'billing\')">＋ New invoice</button>');
+    var refilter = debounce(function () { go('invoices', { search: $('f-q').value, payment_status: $('f-st').value, date_from: $('f-from').value, date_to: $('f-to').value }); }, 400);
+    $('f-q').addEventListener('input', refilter); ['f-st', 'f-from', 'f-to'].forEach(function (id) { $(id).onchange = refilter; });
+  }).catch(fail);
+};
+
+PAGES.invoice = function (p) {
+  call('getInvoice', p).then(function (inv) {
+    var g = inv.guest || {}, b = inv.booking;
+    var html = '<div class="grid g4"><div class="stat"><div class="lbl">Grand total</div><div class="val">' + money(inv.grand_total) + '</div></div><div class="stat"><div class="lbl">Paid</div><div class="val">' + money(inv.paid_amount) + '</div></div><div class="stat"><div class="lbl">Balance</div><div class="val">' + money(inv.balance_amount) + '</div></div><div class="stat"><div class="lbl">Status</div><div class="val" style="font-size:16px;margin-top:10px">' + badge(inv.payment_status) + '</div></div></div>' +
+      '<div class="grid g2" style="margin-top:16px"><div class="card"><h3>Bill to</h3><dl class="kv"><dt>Guest</dt><dd><a onclick="go(\'guest\',{id:' + g.id + '})">' + esc(g.full_name) + '</a></dd><dt>Mobile</dt><dd>' + esc(g.mobile_number) + '</dd><dt>Invoice date</dt><dd>' + fd(inv.invoice_date) + '</dd><dt>Due date</dt><dd>' + fd(inv.due_date) + '</dd>' +
+      (b ? '<dt>Booking</dt><dd><a onclick="go(\'booking\',{id:' + b.id + '})">' + esc(b.booking_number) + '</a> · Room ' + esc(b.room_number) + '</dd><dt>Stay</dt><dd>' + fdt(b.check_in_at) + ' → ' + fdt(b.actual_check_out_at || b.expected_check_out_at) + '</dd>' : '') +
+      '<dt>Notes</dt><dd>' + (esc(inv.notes) || '—') + '</dd></dl></div>' +
+      '<div class="card"><h3>Summary</h3><div class="totals-box" style="max-width:none">' +
+      [['Room', inv.room_charges], ['Food', inv.food_charges], ['Service', inv.service_charges], ['Other', inv.other_charges]].filter(function (r) { return r[1]; }).map(function (r) { return '<div class="row between"><span>' + r[0] + '</span><span>' + money(r[1]) + '</span></div>'; }).join('') +
+      (inv.discount_amount ? '<div class="row between"><span>Discount</span><span>- ' + money(inv.discount_amount) + '</span></div>' : '') +
+      '<div class="row between"><b>Subtotal</b><b>' + money(inv.subtotal) + '</b></div><div class="row between"><span>' + esc(inv.tax_name) + ' (' + inv.tax_rate + '%)</span><span>' + money(inv.tax_amount) + '</span></div><div class="row between grand"><span>Grand total</span><span>' + money(inv.grand_total) + '</span></div></div></div></div>' +
+      '<div class="card"><h3>Items</h3>' + table(['Description', 'Category', '>Qty', '>Rate', '>Amount'], inv.items.map(function (i) {
+        return '<tr><td>' + esc(i.description) + '</td><td>' + esc(label(i.category)) + '</td><td class="right">' + i.quantity + '</td><td class="right">' + money(i.unit_price) + '</td><td class="right">' + (i.category === 'discount' ? '- ' : '') + money(Math.abs(i.total_price)) + '</td></tr>';
+      })) + '</div>' +
+      '<div class="card"><div class="row between"><h3>Payments</h3>' + (inv.balance_amount > 0 ? '<button class="btn success sm" onclick="paymentForm(' + inv.id + ',' + inv.balance_amount + ')">＋ Record payment</button>' : '') + '</div>' +
+      table(['Payment', 'Date', 'Method', 'Reference', 'By', '>Amount'], inv.payments.map(function (pm) {
+        return '<tr><td>' + esc(pm.payment_number) + '</td><td>' + fdt(pm.payment_date) + '</td><td>' + esc(label(pm.payment_method)) + '</td><td>' + esc(pm.transaction_reference) + '</td><td>' + esc(pm.recorded_by_name) + '</td><td class="right">' + money(pm.amount) + '</td></tr>';
+      }), 'No payments yet.') + '</div>';
+    setPage('Invoice ' + inv.invoice_number, html,
+      '<button class="btn" onclick="go(\'invoices\')">← Invoices</button><button class="btn" onclick="printInvoice(' + inv.id + ')">🖨 Print</button><button class="btn primary" onclick="downloadPdf(' + inv.id + ')">⬇ PDF</button>' +
+      (inv.balance_amount > 0 ? '<button class="btn success" onclick="paymentForm(' + inv.id + ',' + inv.balance_amount + ')">Record payment</button>' : ''));
+  }).catch(fail);
+};
+function paymentForm(invoiceId, balance) {
+  openModal('Record payment', '<form id="pay-form"><div class="alert info">Balance due: <b>' + money(balance) + '</b></div><div class="grid g2">' +
+    '<label>Amount *<input type="number" step="0.01" min="0.01" name="amount" required value="' + balance + '"></label>' +
+    '<label>Method<select name="payment_method">' + opts(S.lists.payment_methods, 'cash') + '</select></label>' +
+    '<label>Date & time<input type="datetime-local" name="payment_date" value="' + dtLocal(new Date()) + '"></label>' +
+    '<label>Reference / UTR<input name="transaction_reference"></label></div><label>Note<input name="note"></label>' +
+    '<div class="modal-foot"><button type="button" class="btn" onclick="closeModal()">Cancel</button><button class="btn success" type="submit">Save payment</button></div></form>');
+  $('pay-form').onsubmit = function (ev) {
+    ev.preventDefault(); var d = formData(ev.target); d.invoice_id = invoiceId; submitting(ev.target, true);
+    call('recordPayment', d).then(function () { closeModal(); toast('Payment recorded.'); go('invoice', { id: invoiceId }); }).catch(fail).then(function () { submitting(ev.target, false); });
+  };
+}
+function printInvoice(id) {
+  var w = window.open('', '_blank');
+  call('invoiceHtml', { id: id }).then(function (html) {
+    if (!w) return toast('Allow pop-ups to print invoices.', true);
+    w.document.open(); w.document.write(html); w.document.close(); setTimeout(function () { w.focus(); w.print(); }, 400);
+  }).catch(function (e) { if (w) w.close(); fail(e); });
+}
+function downloadPdf(id) {
+  toast('Generating PDF…');
+  call('invoicePdf', { id: id }).then(function (r) {
+    var bin = atob(r.base64), bytes = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    var url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
+    var a = document.createElement('a'); a.href = url; a.download = r.filename; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 5000);
+  }).catch(fail);
+}
+
+// ============================================================= REPORTS (admin)
+var REPORT_TABS = [['checkins', 'Daily check-ins'], ['checkouts', 'Daily check-outs'], ['payments', 'Payments'], ['billing', 'Date-wise billing'], ['guests', 'Guest history']];
+PAGES.reports = function (p) {
+  p = p || {}; var tab = p.tab || 'checkins';
+  call('reports', p).then(function (r) {
+    S.report = r;
+    var cols = reportColumns(tab), rows = r[tab];
+    var summary = '';
+    if (tab === 'payments') summary = '<div class="grid g4" style="margin-bottom:14px"><div class="stat"><div class="lbl">Collected</div><div class="val">' + money(r.totals.payments) + '</div></div>' + Object.keys(r.totals.by_method).map(function (m) { return '<div class="stat"><div class="lbl">' + esc(label(m)) + '</div><div class="val">' + money(r.totals.by_method[m]) + '</div></div>'; }).join('') + '</div>';
+    if (tab === 'billing') summary = '<div class="grid g4" style="margin-bottom:14px"><div class="stat"><div class="lbl">Billed</div><div class="val">' + money(r.totals.billed) + '</div></div><div class="stat"><div class="lbl">Tax</div><div class="val">' + money(r.totals.tax) + '</div></div><div class="stat"><div class="lbl">Paid</div><div class="val">' + money(r.totals.paid) + '</div></div><div class="stat"><div class="lbl">Balance</div><div class="val">' + money(r.totals.balance) + '</div></div></div>';
+    var html = '<div class="filters"><label>From<input type="date" id="r-from" value="' + esc(r.date_from) + '"></label><label>To<input type="date" id="r-to" value="' + esc(r.date_to) + '"></label><label class="grow">Search<input id="r-q" value="' + esc(p.search || '') + '" placeholder="Guest, mobile, number…"></label><button class="btn primary" id="r-go">Apply</button></div>' +
+      '<div class="tabs">' + REPORT_TABS.map(function (t) { return '<a class="' + (t[0] === tab ? 'active' : '') + '" onclick="go(\'reports\',Object.assign({},S.params,{tab:\'' + t[0] + '\'}))">' + t[1] + ' <span class="muted small">(' + r[t[0]].length + ')</span></a>'; }).join('') + '</div>' +
+      summary + '<div class="card">' + table(cols.map(function (c) { return c[0]; }), rows.map(function (row) { return '<tr>' + cols.map(function (c) { return '<td' + (/^>/.test(c[0]) ? ' class="right"' : '') + '>' + c[2](row) + '</td>'; }).join('') + '</tr>'; }), 'No records in this period.') + '</div>';
+    setPage('Reports', html, '<button class="btn" onclick="exportReport(\'' + tab + '\')">⬇ Export CSV</button>');
+    $('r-go').onclick = function () { go('reports', { tab: tab, date_from: $('r-from').value, date_to: $('r-to').value, search: $('r-q').value }); };
+  }).catch(fail);
+};
+function reportColumns(tab) {
+  var t = function (k) { return function (r) { return esc(r[k]); }; }, m = function (k) { return function (r) { return money(r[k]); }; }, d = function (k) { return function (r) { return fdt(r[k]); }; };
+  var link = function (route, idk, k) { return function (r) { return '<a onclick="go(\'' + route + '\',{id:' + r[idk] + '})">' + esc(r[k]) + '</a>'; }; };
+  return {
+    checkins: [['Booking', 'booking_number', link('booking', 'id', 'booking_number')], ['Guest', 'guest_name', t('guest_name')], ['Mobile', 'guest_mobile', t('guest_mobile')], ['Room', 'room_number', t('room_number')], ['Check-in', 'check_in_at', d('check_in_at')], ['Expected out', 'expected_check_out_at', d('expected_check_out_at')], ['>Charge', 'total_charge', m('total_charge')], ['Status', 'status', function (r) { return badge(r.status); }]],
+    checkouts: [['Booking', 'booking_number', link('booking', 'id', 'booking_number')], ['Guest', 'guest_name', t('guest_name')], ['Room', 'room_number', t('room_number')], ['Check-in', 'check_in_at', d('check_in_at')], ['Check-out', 'actual_check_out_at', function (r) { return r.actual_check_out_at ? fdt(r.actual_check_out_at) : '<span class="muted">Due ' + fdt(r.expected_check_out_at) + '</span>'; }], ['Invoice', 'invoice_number', function (r) { return r.invoice_id ? link('invoice', 'invoice_id', 'invoice_number')(r) : '<span class="muted">—</span>'; }], ['Status', 'status', function (r) { return badge(r.status); }]],
+    payments: [['Payment', 'payment_number', t('payment_number')], ['Date', 'payment_date', d('payment_date')], ['Guest', 'guest_name', t('guest_name')], ['Invoice', 'invoice_number', link('invoice', 'invoice_id', 'invoice_number')], ['Method', 'payment_method', function (r) { return esc(label(r.payment_method)); }], ['Reference', 'transaction_reference', t('transaction_reference')], ['>Amount', 'amount', m('amount')]],
+    billing: [['Invoice', 'invoice_number', link('invoice', 'id', 'invoice_number')], ['Date', 'invoice_date', function (r) { return fd(r.invoice_date); }], ['Guest', 'guest_name', t('guest_name')], ['>Subtotal', 'subtotal', m('subtotal')], ['>Tax', 'tax_amount', m('tax_amount')], ['>Total', 'grand_total', m('grand_total')], ['>Paid', 'paid_amount', m('paid_amount')], ['>Balance', 'balance_amount', m('balance_amount')], ['Status', 'payment_status', function (r) { return badge(r.payment_status); }]],
+    guests: [['Guest', 'full_name', link('guest', 'id', 'full_name')], ['Mobile', 'mobile_number', t('mobile_number')], ['City', 'city', t('city')], ['Visits', 'total_visits', t('total_visits')], ['Bookings', 'bookings_count', t('bookings_count')], ['Invoices', 'invoices_count', t('invoices_count')], ['>Billed', 'total_billed', m('total_billed')], ['>Paid', 'total_paid', m('total_paid')]]
+  }[tab];
+}
+function exportReport(tab) {
+  var cols = reportColumns(tab), rows = S.report[tab];
+  var cell = function (v) { v = String(v === null || v === undefined ? '' : v); if (/^[=+\-@]/.test(v)) v = "'" + v; return '"' + v.replace(/"/g, '""') + '"'; };
+  var csv = [cols.map(function (c) { return cell(c[0].replace(/^>/, '')); }).join(',')].concat(rows.map(function (r) { return cols.map(function (c) { return cell(r[c[1]]); }).join(','); })).join('\r\n');
+  var url = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv' }));
+  var a = document.createElement('a'); a.href = url; a.download = tab + '_' + S.report.date_from + '_to_' + S.report.date_to + '.csv'; document.body.appendChild(a); a.click(); a.remove();
+}
+
+// ============================================================= SETTINGS (admin)
+PAGES.settings = function () {
+  call('getSettings').then(function (s) {
+    var f = function (k, l, type) { return '<label>' + l + '<input name="' + k + '" type="' + (type || 'text') + '"' + (type === 'number' ? ' step="0.01" min="0"' : '') + ' value="' + esc(s[k]) + '"></label>'; };
+    var html = '<form id="set-form"><div class="grid g2"><div class="card"><h3>Hotel</h3>' + f('hotel_name', 'Hotel name *') + f('address', 'Address') +
+      '<div class="grid g2">' + f('city', 'City') + f('state', 'State') + f('country', 'Country') + f('postal_code', 'Postal code') + f('phone', 'Phone') + f('email', 'Email', 'email') + '</div>' + f('website', 'Website') + f('gstin', 'GSTIN') + '</div>' +
+      '<div><div class="card"><h3>Billing & tax</h3><div class="grid g2">' + f('invoice_prefix', 'Invoice prefix') + f('next_invoice_number', 'Next invoice number', 'number') + f('tax_name', 'Tax name') + f('tax_rate', 'Tax rate %', 'number') + f('currency_symbol', 'Currency symbol') + '<span></span>' + f('default_check_in_time', 'Default check-in', 'time') + f('default_check_out_time', 'Default check-out', 'time') + '</div></div>' +
+      '<div class="card"><h3>Bank / UPI (printed on invoice)</h3><div class="grid g2">' + f('bank_name', 'Bank name') + f('bank_account_number', 'Account number') + f('bank_ifsc', 'IFSC') + f('bank_upi_id', 'UPI ID') + '</div></div></div></div>' +
+      '<div class="card"><h3>Invoice text</h3><label>Footer message<input name="footer_message" value="' + esc(s.footer_message) + '"></label><label>Terms & conditions<textarea name="terms_and_conditions">' + esc(s.terms_and_conditions) + '</textarea></label>' +
+      '<button class="btn primary" type="submit">Save settings</button></div></form>';
+    setPage('Hotel settings', html);
+    $('set-form').onsubmit = function (ev) {
+      ev.preventDefault(); submitting(ev.target, true);
+      call('saveSettings', formData(ev.target)).then(function (ns) { S.settings = ns; $('hotel-name').textContent = ns.hotel_name; toast('Settings saved.'); }).catch(fail).then(function () { submitting(ev.target, false); });
+    };
+  }).catch(fail);
+};
+
+// ============================================================= USERS (admin)
+PAGES.users = function () {
+  call('listUsers').then(function (list) {
+    S.usersCache = list;
+    var html = '<div class="card">' + table(['Name', 'Email', 'Phone', 'Role', 'Status', ''], list.map(function (u) {
+      return '<tr><td><b>' + esc(u.name) + '</b></td><td>' + esc(u.email) + '</td><td>' + esc(u.phone) + '</td><td>' + badge(u.role) + '</td><td>' + (u.is_active ? badge('available').replace('Available', 'Active') : badge('cancelled').replace('Cancelled', 'Inactive')) + '</td>' +
+        '<td class="right nowrap"><button class="btn sm" onclick="userForm(' + u.id + ')">Edit</button> ' + (u.id !== S.user.id ? '<button class="btn sm ' + (u.is_active ? 'danger' : '') + '" onclick="toggleUser(' + u.id + ')">' + (u.is_active ? 'Deactivate' : 'Activate') + '</button>' : '') + '</td></tr>';
+    })) + '</div>';
+    setPage('Staff', html, '<button class="btn primary" onclick="userForm()">＋ Add staff</button>');
+  }).catch(fail);
+};
+function userForm(id) {
+  var u = (S.usersCache || []).filter(function (x) { return x.id === id; })[0] || { role: 'receptionist' };
+  openModal(id ? 'Edit staff' : 'Add staff', '<form id="user-form"><input type="hidden" name="id" value="' + esc(id || '') + '"><div class="grid g2">' +
+    '<label>Name *<input name="name" required value="' + esc(u.name || '') + '"></label><label>Email *<input name="email" type="email" required value="' + esc(u.email || '') + '"></label>' +
+    '<label>Phone<input name="phone" value="' + esc(u.phone || '') + '"></label><label>Role<select name="role">' + opts(S.lists.roles, u.role) + '</select></label>' +
+    '<label>' + (id ? 'New password (leave blank to keep)' : 'Password *') + '<input name="password" type="password" minlength="6"' + (id ? '' : ' required') + ' autocomplete="new-password"></label></div>' +
+    '<div class="modal-foot"><button type="button" class="btn" onclick="closeModal()">Cancel</button><button class="btn primary" type="submit">Save</button></div></form>');
+  $('user-form').onsubmit = function (ev) {
+    ev.preventDefault(); submitting(ev.target, true);
+    call('saveUser', formData(ev.target)).then(function () { closeModal(); toast('Staff saved.'); go('users'); }).catch(fail).then(function () { submitting(ev.target, false); });
+  };
+}
+function toggleUser(id) { call('toggleUser', { id: id }).then(function () { toast('Updated.'); go('users'); }).catch(fail); }
+
+// ============================================================= PROFILE
+PAGES.profile = function () {
+  setPage('Change password', '<div class="card" style="max-width:440px"><form id="pw-form"><label>Current password<input type="password" name="current_password" required autocomplete="current-password"></label><label>New password<input type="password" name="new_password" minlength="6" required autocomplete="new-password"></label><label>Confirm new password<input type="password" name="confirm" minlength="6" required autocomplete="new-password"></label><button class="btn primary" type="submit">Update password</button></form></div>');
+  $('pw-form').onsubmit = function (ev) {
+    ev.preventDefault(); var d = formData(ev.target);
+    if (d.new_password !== d.confirm) return toast('Passwords do not match.', true);
+    submitting(ev.target, true);
+    call('changePassword', d).then(function () { ev.target.reset(); toast('Password updated.'); }).catch(fail).then(function () { submitting(ev.target, false); });
+  };
+};
+
+// ------------------------------------------------------------- start
+(function init() {
+  S.token = store('hm_token');
+  try { var last = JSON.parse(store('hm_route') || 'null'); if (last && PAGES[last.r]) { S.route = last.r; S.params = last.p || {}; } } catch (e) { }
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeModal(); });
+  if (S.token) boot(); else showLogin();
+})();
+</script>
