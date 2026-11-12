@@ -30,6 +30,7 @@ var ROUTES = {
   checkIn:          { fn: checkIn_, roles: STAFF, write: true },
   checkOut:         { fn: checkOut_, roles: STAFF, write: true },
   cancelBooking:    { fn: cancelBooking_, roles: STAFF, write: true },
+  deleteBookings:   { fn: deleteBookings_, roles: STAFF, write: true },
 
   billingPrefill:   { fn: billingPrefill_, roles: STAFF },
   createInvoice:    { fn: createInvoice_, roles: STAFF, write: true },
@@ -50,7 +51,7 @@ var ROUTES = {
 
 function doGet() {
   return HtmlService.createTemplateFromFile('Index').evaluate()
-    .setTitle('GRS Hotel')
+    .setTitle('Hotel GRS')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.DEFAULT);
 }

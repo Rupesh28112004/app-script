@@ -1,6 +1,6 @@
 <script>
 /* =====================================================================
- * GRS Hotel — client app (runs in the browser)
+ * Hotel GRS — client app (runs in the browser)
  * ===================================================================== */
 var S = { token: null, user: null, settings: {}, lists: {}, room_types: [], route: 'dashboard', params: {} };
 var $ = function (id) { return document.getElementById(id); };
@@ -81,7 +81,7 @@ $('yr').textContent = new Date().getFullYear();
 
 // ------------------------------------------------------------- GRS logo (inline SVG)
 function grsLogoSvg() {
-  return '<svg viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="GRS Hotel">' +
+  return '<svg viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Hotel GRS">' +
     '<rect x="5" y="5" width="110" height="110" rx="22" fill="#0b1f3a" stroke="#c9a227" stroke-width="3.5"/>' +
     '<rect x="13" y="13" width="94" height="94" rx="16" fill="none" stroke="#c9a227" stroke-width="1" opacity=".45"/>' +
     '<path d="M36 47 L44 31 L60 42 L76 31 L84 47 Z" fill="#c9a227"/>' +
@@ -689,8 +689,8 @@ function resizeImage(file, maxW, maxH) {
 }
 function setBrandLogo(src) {
   var el = document.querySelector('.brand-logo');
-  // Uploaded logo -> logo only, full width. No logo -> "GRS Hotel" text only.
-  el.innerHTML = src ? '<img src="' + esc(src) + '" alt="GRS Hotel">' : '';
+  // Uploaded logo -> logo only, full width. No logo -> "Hotel GRS" text only.
+  el.innerHTML = src ? '<img src="' + esc(src) + '" alt="Hotel GRS">' : '';
   el.classList.toggle('hidden', !src);
   el.parentNode.classList.toggle('has-logo', !!src);
 }

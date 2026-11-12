@@ -327,6 +327,43 @@ function cancelBooking_(p, user) {
   return true;
 }
 
+function deleteBookings_(p, user) {
+  var rawIds = Array.isArray(p.ids) ? p.ids : (p.id ? [p.id] : []);
+  var ids = rawIds.map(function (v) { return num_(v); }).filter(function (v) { return v > 0; });
+  if (!ids.length) throw new Error('Select at least one booking to delete.');
+
+  var deleted = 0;
+  var roomIdsToCheck = {};
+  ids.forEach(function (id) {
+    var b = Db.find('Bookings', id);
+    if (!b) return;
+    if (b.status === 'checked_in' && b.room_id) roomIdsToCheck[b.room_id] = true;
+    Db.where('Invoices', function (i) { return i.booking_id === b.id; }).forEach(function (i) {
+      Db.update('Invoices', i.id, { booking_id: '' });
+    });
+    Db.where('Payments', function (pm) { return pm.booking_id === b.id; }).forEach(function (pm) {
+      Db.update('Payments', pm.id, { booking_id: '' });
+    });
+    if (Db.remove('Bookings', b.id)) deleted++;
+  });
+
+  Object.keys(roomIdsToCheck).forEach(function (rid) {
+    var roomId = num_(rid);
+    var stillOccupied = Db.where('Bookings', function (b) {
+      return b.room_id === roomId && b.status === 'checked_in';
+    }).length > 0;
+    if (!stillOccupied) {
+      var room = Db.find('Rooms', roomId);
+      if (room && room.status === 'occupied') Db.update('Rooms', roomId, { status: 'available' });
+    }
+  });
+
+  if (deleted > 0) {
+    logActivity_(user, 'bookings_deleted', 'Deleted ' + deleted + ' booking(s).');
+  }
+  return { deleted: deleted };
+}
+
 // ----------------------------------------------------------------- billing / invoices
 
 function recalcInvoice_(invoiceId) {
@@ -546,6 +583,7 @@ function invoiceHtml_(p) {
   var h = {};
   ['hotel_name', 'address', 'city', 'state', 'country', 'postal_code', 'phone', 'email', 'gstin', 'bank_name',
     'bank_account_number', 'bank_ifsc', 'bank_upi_id', 'terms_and_conditions'].forEach(function (k) { h[k] = pick(k); });
+  if (!h.hotel_name || /^\s*grs\s*hot[ae]l\s*$/i.test(h.hotel_name) || h.hotel_name === 'Grand Horizon Hotel & Suites') h.hotel_name = 'Hotel GRS';
   h.full_address = [h.address, h.city, (h.state + (h.postal_code ? ' - ' + h.postal_code : '')).trim(), h.country]
     .filter(function (x) { return x; }).join(', ');
 

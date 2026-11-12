@@ -90,7 +90,7 @@ var HEADER_COLORS = {
 };
 
 var DEFAULT_SETTINGS = {
-  hotel_name: 'GRS Hotel',
+  hotel_name: 'Hotel GRS',
   address: '',
   city: '',
   state: '',

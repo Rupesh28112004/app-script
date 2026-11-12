@@ -169,8 +169,8 @@ var Db = (function () {
         if (r[0] !== '') out[String(r[0])] = r[1] instanceof Date ? fromCell('Settings', 'value', r[1]) : String(r[1]);
       });
     }
-    // Old sample name from setup() -> GRS Hotel (a name set later in Settings still wins)
-    if (out.hotel_name === 'Grand Horizon Hotel & Suites' || out.hotel_name === '') out.hotel_name = 'GRS Hotel';
+    // Old sample name from setup() -> Hotel GRS (a name set later in Settings still wins)
+    if (out.hotel_name === 'Grand Horizon Hotel & Suites' || out.hotel_name === '' || /^\s*grs\s*hot[ae]l\s*$/i.test(out.hotel_name)) out.hotel_name = 'Hotel GRS';
     return out;
   }
 
