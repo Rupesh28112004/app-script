@@ -82,15 +82,13 @@ $('yr').textContent = new Date().getFullYear();
 // ------------------------------------------------------------- GRS logo (inline SVG)
 function grsLogoSvg() {
   return '<svg viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="GRS Hotel">' +
-    '<circle cx="60" cy="60" r="57" fill="#fff"/>' +
-    '<circle cx="60" cy="60" r="52" fill="#dc2626"/>' +
-    '<circle cx="60" cy="60" r="45" fill="none" stroke="#fff" stroke-width="1.2" opacity=".6"/>' +
-    '<path d="M41 42 L60 28 L79 42" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>' +
-    '<text x="60" y="72" text-anchor="middle" font-family="Georgia,Times New Roman,serif" font-weight="700" font-size="29" letter-spacing="1.5" fill="#fff">GRS</text>' +
-    '<line x1="38" y1="81" x2="82" y2="81" stroke="#fff" stroke-width="1.2" opacity=".8"/>' +
-    '<text x="60" y="94" text-anchor="middle" font-family="Arial,sans-serif" font-size="9.5" font-weight="700" letter-spacing="4" fill="#fff">HOTEL</text></svg>';
+    '<rect x="5" y="5" width="110" height="110" rx="22" fill="#0b1f3a" stroke="#c9a227" stroke-width="3.5"/>' +
+    '<rect x="13" y="13" width="94" height="94" rx="16" fill="none" stroke="#c9a227" stroke-width="1" opacity=".45"/>' +
+    '<path d="M36 47 L44 31 L60 42 L76 31 L84 47 Z" fill="#c9a227"/>' +
+    '<circle cx="44" cy="29" r="3.2" fill="#c9a227"/><circle cx="60" cy="39" r="3.2" fill="#c9a227"/><circle cx="76" cy="29" r="3.2" fill="#c9a227"/>' +
+    '<text x="60" y="80" text-anchor="middle" font-family="Georgia,Times New Roman,serif" font-size="29" font-weight="700" fill="#fff" letter-spacing="2">GRS</text>' +
+    '<text x="60" y="97" text-anchor="middle" font-family="Arial,sans-serif" font-size="9" font-weight="700" letter-spacing="4" fill="#c9a227">HOTEL</text></svg>';
 }
-Array.prototype.forEach.call(document.querySelectorAll('.grs-logo, .brand-logo'), function (el) { el.innerHTML = grsLogoSvg(); });
 
 function logout() { call('logout').catch(function () {}); S.token = null; store('hm_token', null); showLogin(); }
 
@@ -691,7 +689,9 @@ function resizeImage(file, maxW, maxH) {
 }
 function setBrandLogo(src) {
   var el = document.querySelector('.brand-logo');
-  el.innerHTML = src ? '<img src="' + esc(src) + '" alt="GRS Hotel">' : grsLogoSvg();
+  // Text-only brand; show an image only if one was uploaded in Settings
+  el.innerHTML = src ? '<img src="' + esc(src) + '" alt="GRS Hotel">' : '';
+  el.classList.toggle('hidden', !src);
 }
 
 // ============================================================= USERS (admin)
