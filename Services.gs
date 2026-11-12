@@ -574,7 +574,10 @@ function invoiceHtml_(p) {
   t.creator = (Db.find('Users', inv.created_by) || {}).name || '';
   t.logo = Db.getAsset('logo');
   t.signature = Db.getAsset('signature');
-  t.fillerHeight = Math.max(30, 170 - lines.length * 30);
+  // Stretch the items area so the invoice fills one A4 page; shrink it as rows / text grow.
+  var termsLines = h.terms_and_conditions ? h.terms_and_conditions.split(/\r?\n/).length : 1;
+  var longRows = lines.filter(function (i) { return String(i.description).length > 55; }).length;
+  t.fillerHeight = Math.max(20, 270 - lines.length * 30 - longRows * 16 - Math.max(0, termsLines - 4) * 15);
   t.amt = formatIndian_;
   t.num = num;
   t.fmt = fmtBill_;

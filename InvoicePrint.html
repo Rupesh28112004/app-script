@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <title>Invoice - <?= inv.invoice_number ?></title>
 <style>
-  @page { margin: 24px 26px; size: A4 portrait; }
-  body { font-family: Helvetica, Arial, sans-serif; margin: 0; padding: 18px 20px; }
-  .bill { color: #222; font-size: 11.5px; line-height: 1.4; -webkit-print-color-adjust: exact; print-color-adjust: exact; max-width: 860px; margin: 0 auto; }
+  @page { margin: 18px 20px; size: A4 portrait; }
+  body { font-family: Helvetica, Arial, sans-serif; margin: 0; padding: 0; }
+  .bill { color: #222; font-size: 12px; line-height: 1.4; -webkit-print-color-adjust: exact; print-color-adjust: exact; max-width: 900px; margin: 0 auto; }
   .bill table { width: 100%; border-collapse: collapse; }
   .bill td, .bill th { vertical-align: top; text-align: left; }
   .bill .r { text-align: right !important; }
@@ -28,6 +28,7 @@
   .b-col { border-right: 1px solid #1c6db5; }
   .b-col-last { border-right: 0; }
   .b-kv td { padding: 1.5px 0; font-size: 11.5px; }
+  .b-kv td { overflow-wrap: anywhere; word-break: break-word; }
   .b-kv td.k { font-weight: bold; width: 1%; white-space: nowrap; padding-right: 6px; }
   .b-pad { padding: 4px 8px 8px; }
 
@@ -85,15 +86,15 @@
         <td class="b-col" style="width:38%">
           <div class="b-sec" style="margin:4px 8px 4px 4px">Details of Guest | Billed to :</div>
           <div class="b-pad"><table class="b-kv">
-            <tr><td class="k">Name</td><td>: <?= g.full_name ?></td></tr>
+            <tr><td class="k">Name</td><td>:&nbsp;<?= g.full_name ?></td></tr>
             <? if (g.address || g.city) { ?>
-              <tr><td class="k">Address</td><td>: <?= [g.address, g.city, ((g.state || '') + (g.postal_code ? ' - ' + g.postal_code : '')).trim()].filter(String).join(', ') ?></td></tr>
+              <tr><td class="k">Address</td><td>:&nbsp;<?= [g.address, g.city, ((g.state || '') + (g.postal_code ? ' - ' + g.postal_code : '')).trim()].filter(String).join(', ') ?></td></tr>
             <? } ?>
-            <tr><td class="k">Phone</td><td>: <?= g.mobile_number ?></td></tr>
-            <? if (g.email) { ?><tr><td class="k">Email</td><td>: <?= g.email ?></td></tr><? } ?>
-            <? if (g.id_type) { ?><tr><td class="k">ID Proof</td><td>: <?= g.id_type ?><?= idMasked ? ' (' + idMasked + ')' : '' ?></td></tr><? } ?>
-            <? if (g.state) { ?><tr><td class="k">State</td><td>: <?= g.state ?></td></tr><? } ?>
-            <? if (h.state) { ?><tr><td class="k">Place of Supply</td><td>: <?= h.state ?></td></tr><? } ?>
+            <tr><td class="k">Phone</td><td>:&nbsp;<?= g.mobile_number ?></td></tr>
+            <? if (g.email) { ?><tr><td class="k">Email</td><td>:&nbsp;<?= g.email ?></td></tr><? } ?>
+            <? if (g.id_type) { ?><tr><td class="k">ID Proof</td><td>:&nbsp;<?= g.id_type ?><?= idMasked ? ' (' + idMasked + ')' : '' ?></td></tr><? } ?>
+            <? if (g.state) { ?><tr><td class="k">State</td><td>:&nbsp;<?= g.state ?></td></tr><? } ?>
+            <? if (h.state) { ?><tr><td class="k">Place of Supply</td><td>:&nbsp;<?= h.state ?></td></tr><? } ?>
           </table></div>
         </td>
         <td class="b-col" style="width:31%">
@@ -102,13 +103,13 @@
             <? if (b) { ?>
               <table class="b-kv">
                 <? if (b.room_number) { ?>
-                  <tr><td class="k">Room No.</td><td>: <?= b.room_number ?></td></tr>
-                  <tr><td class="k">Room Type</td><td>: <?= b.room_type ?></td></tr>
+                  <tr><td class="k">Room No.</td><td>:&nbsp;<?= b.room_number ?></td></tr>
+                  <tr><td class="k">Room Type</td><td>:&nbsp;<?= b.room_type ?></td></tr>
                 <? } ?>
-                <tr><td class="k">Check-in</td><td>: <?= fmt(b.check_in_at, true) ?></td></tr>
-                <? if (b.actual_check_out_at || b.expected_check_out_at) { ?><tr><td class="k">Check-out</td><td>: <?= fmt(b.actual_check_out_at || b.expected_check_out_at, true) ?></td></tr><? } ?>
-                <tr><td class="k">Duration</td><td>: <?= num(b.units_booked) ?> <?= b.billing_type === 'hourly' ? 'Hour(s)' : 'Night(s)' ?></td></tr>
-                <tr><td class="k">Guests</td><td>: <?= b.adults_count ?> Adult(s)<?= b.children_count ? ', ' + b.children_count + ' Child(ren)' : '' ?></td></tr>
+                <tr><td class="k">Check-in</td><td>:&nbsp;<?= fmt(b.check_in_at, true) ?></td></tr>
+                <? if (b.actual_check_out_at || b.expected_check_out_at) { ?><tr><td class="k">Check-out</td><td>:&nbsp;<?= fmt(b.actual_check_out_at || b.expected_check_out_at, true) ?></td></tr><? } ?>
+                <tr><td class="k">Duration</td><td>:&nbsp;<?= num(b.units_booked) ?> <?= b.billing_type === 'hourly' ? 'Hour(s)' : 'Night(s)' ?></td></tr>
+                <tr><td class="k">Guests</td><td>:&nbsp;<?= b.adults_count ?> Adult(s)<?= b.children_count ? ', ' + b.children_count + ' Child(ren)' : '' ?></td></tr>
               </table>
             <? } else { ?>
               <table class="b-kv"><tr><td>Direct billing</td></tr></table>
@@ -118,12 +119,12 @@
         <td class="b-col-last" style="width:31%">
           <div class="b-sec" style="margin:4px">Invoice Information :</div>
           <div class="b-pad"><table class="b-kv">
-            <tr><td class="k">Invoice No.</td><td>: <span class="b"><?= inv.invoice_number ?></span></td></tr>
-            <tr><td class="k">Invoice Date</td><td>: <?= fmt(inv.invoice_date, false) ?></td></tr>
-            <? if (b) { ?><tr><td class="k">Booking No.</td><td style="white-space:nowrap">: <?= b.booking_number ?></td></tr><? } ?>
-            <tr><td class="k">Payment Mode</td><td>: <?= modes[inv.primary_payment_method] || inv.primary_payment_method || '-' ?></td></tr>
+            <tr><td class="k">Invoice No.</td><td>:&nbsp;<span class="b"><?= inv.invoice_number ?></span></td></tr>
+            <tr><td class="k">Invoice Date</td><td>:&nbsp;<?= fmt(inv.invoice_date, false) ?></td></tr>
+            <? if (b) { ?><tr><td class="k">Booking No.</td><td style="white-space:nowrap">:&nbsp;<?= b.booking_number ?></td></tr><? } ?>
+            <tr><td class="k">Payment Mode</td><td>:&nbsp;<?= modes[inv.primary_payment_method] || inv.primary_payment_method || '-' ?></td></tr>
             <tr><td class="k">Reverse Charge</td><td>: No</td></tr>
-            <? if (creator) { ?><tr><td class="k">Prepared By</td><td>: <?= creator ?></td></tr><? } ?>
+            <? if (creator) { ?><tr><td class="k">Prepared By</td><td>:&nbsp;<?= creator ?></td></tr><? } ?>
           </table></div>
         </td>
       </tr>
