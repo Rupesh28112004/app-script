@@ -689,9 +689,10 @@ function resizeImage(file, maxW, maxH) {
 }
 function setBrandLogo(src) {
   var el = document.querySelector('.brand-logo');
-  // Text-only brand; show an image only if one was uploaded in Settings
+  // Uploaded logo -> logo only, full width. No logo -> "GRS Hotel" text only.
   el.innerHTML = src ? '<img src="' + esc(src) + '" alt="GRS Hotel">' : '';
   el.classList.toggle('hidden', !src);
+  el.parentNode.classList.toggle('has-logo', !!src);
 }
 
 // ============================================================= USERS (admin)

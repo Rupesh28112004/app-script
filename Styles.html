@@ -73,9 +73,11 @@
   @media (prefers-reduced-motion: reduce) { .login-bg span, .login-panel, .page, .modal { animation: none !important; } }
 
   /* Brand logo */
-  .brand-logo { width: 40px; height: 40px; flex: none; display: inline-flex; align-items: center; justify-content: center; }
-  .brand-logo svg { width: 100%; height: 100%; }
-  .brand-logo img { height: 38px; max-width: 64px; object-fit: contain; background: #fff; border-radius: 6px; padding: 2px; }
+  /* Uploaded logo: fills the whole brand area, hotel name text hidden */
+  .brand-logo { flex: 1; min-width: 0; display: flex; align-items: center; justify-content: center; background: #fff; border-radius: 10px; padding: 8px; }
+  .brand-logo img { display: block; width: 100%; height: 72px; object-fit: contain; }
+  .brand.has-logo { padding: 12px; }
+  .brand.has-logo #hotel-name { display: none; }
   .grs-logo svg { width: 100%; height: 100%; display: block; }
 
   /* Interactions */
