@@ -38,6 +38,31 @@ In the editor, create each file with the **same name, without the extension** (f
 
 After you edit the code later: **Deploy → Manage deployments → Edit → Version: New version**, so the same URL picks up the changes.
 
+## Push from your computer with clasp (instead of copy/paste)
+
+This folder is linked to the sheet's Apps Script project through `.clasp.json` (git-ignored).
+`.claspignore` makes sure only `.gs`, `.html` and `appsscript.json` get uploaded.
+
+```bash
+npm install -g @google/clasp      # once
+clasp login                       # once, with the Google account that owns the sheet
+# turn on the API once: https://script.google.com/home/usersettings
+
+clasp push        # upload local code -> Apps Script (replaces the online files)
+clasp pull        # download online code -> local (careful: overwrites local files)
+clasp open-script # open the project in the browser
+```
+
+To use it on another machine, create `.clasp.json` with:
+
+```json
+{ "scriptId": "<Script ID from Project Settings>", "rootDir": ".", "scriptExtensions": [".gs", ".js"], "htmlExtensions": [".html"], "jsonExtensions": [".json"] }
+```
+
+`clasp push` only updates the code. The live web app URL keeps serving the old version until you
+**Deploy → Manage deployments → Edit → Version: New version** (or run `clasp create-deployment` the first time and
+`clasp update-deployment <deploymentId>` after that).
+
 ## Features (same as the Laravel app)
 
 - **Dashboard**: occupancy, in-house guests, today's revenue, outstanding balance, due check-outs, recent bookings, invoices and activity

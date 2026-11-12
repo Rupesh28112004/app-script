@@ -1,0 +1,5 @@
+# Only push Apps Script source files
+**/**
+!*.gs
+!*.html
+!appsscript.json
