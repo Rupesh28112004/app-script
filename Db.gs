@@ -6,6 +6,8 @@
 var Db = (function () {
   var _ss = null;
   var _cache = {};
+  var _sheets = {};
+  var _colsChecked = {};
 
   function ss() {
     if (!_ss) _ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -15,6 +17,7 @@ var Db = (function () {
 
   var _healed = false;
   function sheet(name) {
+    if (_sheets[name]) return _sheets[name];
     var sh = ss().getSheetByName(name);
     if (!sh && !_healed && SCHEMA[name]) {
       // Self-heal: create any missing tabs (same as running setup) the first time one is needed.
@@ -25,7 +28,7 @@ var Db = (function () {
     if (!sh) {
       throw new Error('Sheet "' + name + '" is missing in spreadsheet "' + ss().getName() + '". Run setup() from the Apps Script editor (or Hotel menu > Setup).');
     }
-    return sh;
+    _sheets[name] = sh; return sh;
   }
 
   function tz() {
@@ -63,10 +66,7 @@ var Db = (function () {
     if (_cache[table]) return _cache[table];
     var headers = SCHEMA[table];
     var sh = sheet(table);
-    var lastCol = sh.getLastColumn();
-    if (lastCol < headers.length) {
-      sh.getRange(1, lastCol + 1, 1, headers.length - lastCol).setValues([headers.slice(lastCol)]);
-    }
+    if (!_colsChecked[table]) { _colsChecked[table] = true; var lastCol = sh.getLastColumn(); if (lastCol < headers.length) sh.getRange(1, lastCol + 1, 1, headers.length - lastCol).setValues([headers.slice(lastCol)]); }
     var last = sh.getLastRow();
     var rows = [];
     if (last >= 2) {
@@ -164,6 +164,7 @@ var Db = (function () {
 
   // ---- Settings (key/value table) ----
   function getSettings() {
+    try { var _c = CacheService.getScriptCache().get('hotel_settings_json'); if (_c) return JSON.parse(_c); } catch (e) {}
     var out = {};
     for (var k in DEFAULT_SETTINGS) out[k] = DEFAULT_SETTINGS[k];
     var sh = sheet('Settings');
@@ -175,10 +176,12 @@ var Db = (function () {
     }
     // Old sample name from setup() -> Hotel GRS (a name set later in Settings still wins)
     if (out.hotel_name === 'Grand Horizon Hotel & Suites' || out.hotel_name === '' || /^\s*(grs\s*hot[ae]l|hot[ae]l\s*grs)\s*$/i.test(out.hotel_name)) out.hotel_name = 'Hotel GRS';
+    try { CacheService.getScriptCache().put('hotel_settings_json', JSON.stringify(out), 600); } catch (e) {}
     return out;
   }
 
   function saveSettings(values) {
+    try { CacheService.getScriptCache().remove('hotel_settings_json'); } catch (e) {}
     var sh = sheet('Settings');
     var last = sh.getLastRow();
     var existing = {};
@@ -206,6 +209,7 @@ var Db = (function () {
   }
 
   function getAsset(key) {
+    try { var _ca = CacheService.getScriptCache().get('hotel_asset_' + key); if (_ca) return _ca; } catch (e) {}
     return assetRows(key)
       .sort(function (a, b) { return a.chunk - b.chunk; })
       .map(function (r) { return r.data.substring(1); }) // strip "~" guard
@@ -213,6 +217,7 @@ var Db = (function () {
   }
 
   function deleteAsset(key) {
+    try { CacheService.getScriptCache().remove('hotel_asset_' + key); } catch (e) {}
     var sh = sheet('Assets');
     assetRows(key).map(function (r) { return r.row; }).sort(function (a, b) { return b - a; })
       .forEach(function (row) { sh.deleteRow(row); });

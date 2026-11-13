@@ -94,7 +94,9 @@ function grsLogoSvg() {
 function logout() { call('logout').catch(function () {}); S.token = null; store('hm_token', null); showLogin(); }
 
 function boot() {
-  call('bootstrap').then(function (b) {
+  var wantDash = !S.route || S.route === 'dashboard' || S.route === 'login';
+  call('bootstrap', { includeDashboard: wantDash }).then(function (b) {
+    if (b.dashboard) S._dashCache = b.dashboard;
     S.user = b.user; S.settings = b.settings; S.lists = b.lists; S.room_types = b.room_types;
     $('login-view').classList.add('hidden'); $('app-view').classList.remove('hidden');
     $('hotel-name').textContent = S.settings.hotel_name; setBrandLogo(b.logo);$('me-name').textContent = S.user.name; $('me-role').textContent = label(S.user.role);
@@ -130,7 +132,7 @@ function go(route, params) {
 
 // ============================================================= DASHBOARD
 PAGES.dashboard = function () {
-  call('dashboard').then(function (d) {
+  var pDash = S._dashCache ? Promise.resolve(S._dashCache) : call('dashboard'); delete S._dashCache; pDash.then(function (d) {
     var s = d.stats;
     var stat = function (l, v, sub) { return '<div class="stat"><div class="lbl">' + l + '</div><div class="val">' + v + '</div>' + (sub ? '<div class="sub">' + sub + '</div>' : '') + '</div>'; };
     var html = '<div class="grid g4">' +

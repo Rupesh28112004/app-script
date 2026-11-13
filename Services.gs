@@ -832,6 +832,7 @@ function bootstrap_(p, user) {
     settings: Db.getSettings(),
     logo: Db.getAsset('logo'),
     lists: { room_statuses: ROOM_STATUSES, payment_methods: PAYMENT_METHODS, item_categories: ITEM_CATEGORIES, id_types: ID_TYPES, roles: USER_ROLES },
-    room_types: Db.all('Rooms').map(function (r) { return r.room_type; }).filter(function (v, i, a) { return v && a.indexOf(v) === i; })
+    room_types: Db.all('Rooms').map(function (r) { return r.room_type; }).filter(function (v, i, a) { return v && a.indexOf(v) === i; }),
+    dashboard: (p && p.includeDashboard) ? dashboard_() : null
   };
 }
