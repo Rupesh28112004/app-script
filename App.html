@@ -37,9 +37,10 @@ function dtLocal(d) { return ymd(d) + 'T' + pad(d.getHours()) + ':' + pad(d.getM
 function parseDt(s) { var m = String(s || '').match(/(\d{4})-(\d{2})-(\d{2})[T ]?(\d{2})?:?(\d{2})?/); return m ? new Date(+m[1], +m[2] - 1, +m[3], +(m[4] || 0), +(m[5] || 0)) : null; }
 function fdt(s) { if (!s) return '—'; var d = parseDt(s); if (!d) return esc(s); var mon = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getMonth()]; var h = d.getHours(), ap = h >= 12 ? 'PM' : 'AM'; h = h % 12 || 12; return pad(d.getDate()) + ' ' + mon + ' ' + d.getFullYear() + (String(s).length > 10 ? ', ' + h + ':' + pad(d.getMinutes()) + ' ' + ap : ''); }
 function fd(s) { return s ? fdt(String(s).substring(0, 10)) : '—'; }
-function isAdmin() { return S.user && S.user.role === 'admin'; }
+function isAdmin() { return S.user && (S.user.role === 'admin' || S.user.role === 'developer'); }
+function isDeveloper() { return S.user && S.user.role === 'developer'; }
 var BADGE = { available: 'green', paid: 'green', checked_out: 'gray', occupied: 'red', unpaid: 'red', cancelled: 'gray',
-  maintenance: 'gray', cleaning: 'amber', partially_paid: 'amber', checked_in: 'blue', admin: 'blue', receptionist: 'gray' };
+  maintenance: 'gray', cleaning: 'amber', partially_paid: 'amber', checked_in: 'blue', admin: 'blue', receptionist: 'gray', developer: 'purple' };
 function badge(s) { return '<span class="badge b-' + (BADGE[s] || 'gray') + '">' + esc(label(s)) + '</span>'; }
 function opts(list, sel, blank) { return (blank !== undefined ? '<option value="">' + esc(blank) + '</option>' : '') + list.map(function (o) { var v = typeof o === 'object' ? o.v : o, t = typeof o === 'object' ? o.t : label(o); return '<option value="' + esc(v) + '"' + (String(v) === String(sel) ? ' selected' : '') + '>' + esc(t) + '</option>'; }).join(''); }
 function formData(form) { var o = {}; Array.prototype.forEach.call(form.elements, function (el) { if (!el.name) return; if (el.type === 'checkbox') o[el.name] = el.checked; else if (el.type === 'radio') { if (el.checked) o[el.name] = el.value; } else o[el.name] = el.value; }); return o; }
@@ -108,7 +109,8 @@ var NAV = [
 ];
 function renderNav() {
   $('nav').innerHTML = NAV.filter(function (n) { return !n[3] || isAdmin(); }).filter(function (n) { return n[0] !== '-' || isAdmin(); }).map(function (n) {
-    return n[0] === '-' ? '<div class="sep">' + n[1] + '</div>' : '<a data-r="' + n[0] + '" onclick="go(\'' + n[0] + '\')"><span>' + n[1] + '</span>' + n[2] + '</a>';
+    var sepTitle = isDeveloper() ? 'Developer & Admin' : n[1];
+    return n[0] === '-' ? '<div class="sep">' + sepTitle + '</div>' : '<a data-r="' + n[0] + '" onclick="go(\'' + n[0] + '\')"><span>' + n[1] + '</span>' + n[2] + '</a>';
   }).join('');
 }
 
