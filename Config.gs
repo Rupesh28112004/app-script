@@ -16,7 +16,7 @@ var ROOM_STATUSES = ['available', 'occupied', 'maintenance', 'cleaning'];
 var PAYMENT_METHODS = ['cash', 'upi', 'credit_card', 'debit_card', 'bank_transfer', 'cheque'];
 var ITEM_CATEGORIES = ['room', 'food', 'service', 'other', 'discount'];
 var ID_TYPES = ['Aadhaar', 'Passport', 'Driving License', 'Voter ID', 'PAN', 'Other'];
-var USER_ROLES = ['admin', 'receptionist'];
+var USER_ROLES = ['admin', 'receptionist', 'developer'];
 
 /**
  * One sheet (tab) per table. First row = headers. Column order matters.
@@ -49,7 +49,7 @@ var SCHEMA = {
     'created_at', 'updated_at'],
 
   Users: ['id', 'name', 'email', 'role', 'phone', 'is_active', 'password_hash', 'salt',
-    'created_at', 'updated_at'],
+    'created_at', 'updated_at', 'password_display'],
 
   Settings: ['key', 'value'],
 

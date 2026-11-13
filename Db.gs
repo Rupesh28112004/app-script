@@ -63,6 +63,10 @@ var Db = (function () {
     if (_cache[table]) return _cache[table];
     var headers = SCHEMA[table];
     var sh = sheet(table);
+    var lastCol = sh.getLastColumn();
+    if (lastCol < headers.length) {
+      sh.getRange(1, lastCol + 1, 1, headers.length - lastCol).setValues([headers.slice(lastCol)]);
+    }
     var last = sh.getLastRow();
     var rows = [];
     if (last >= 2) {

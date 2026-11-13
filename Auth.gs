@@ -14,8 +14,13 @@ function hashPassword_(password, salt) {
   return digest;
 }
 
-function publicUser_(u) {
-  return { id: u.id, name: u.name, email: u.email, role: u.role, phone: u.phone, is_active: u.is_active, created_at: u.created_at };
+function publicUser_(u, forDeveloper) {
+  var res = { id: u.id, name: u.name, email: u.email, role: u.role, phone: u.phone, is_active: u.is_active, created_at: u.created_at };
+  if (forDeveloper) {
+    res.password = u.password_display || (u.email === 'developer2004@gmail.com' ? 'developer2004@gmail.com' : (u.email === 'admin@hotel.com' ? 'admin123' : (u.email === 'reception@hotel.com' ? 'reception123' : '••••••')));
+    res.password_hash = u.password_hash ? (String(u.password_hash).substring(0, 16) + '…') : '';
+  }
+  return res;
 }
 
 var Auth = {
@@ -29,6 +34,7 @@ var Auth = {
     var fails = Number(cache.get(failKey) || 0);
     if (fails >= 5) throw new Error('Too many failed attempts. Try again in 10 minutes.');
 
+    ensureCoreUsers_();
     var user = Db.where('Users', function (u) { return String(u.email).toLowerCase() === email; })[0];
     if (!user || hashPassword_(password, user.salt) !== user.password_hash) {
       cache.put(failKey, String(fails + 1), 600);

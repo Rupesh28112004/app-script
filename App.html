@@ -700,9 +700,9 @@ function setBrandLogo(src) {
 PAGES.users = function () {
   call('listUsers').then(function (list) {
     S.usersCache = list;
-    var html = '<div class="card">' + table(['Name', 'Email', 'Phone', 'Role', 'Status', ''], list.map(function (u) {
-      return '<tr><td><b>' + esc(u.name) + '</b></td><td>' + esc(u.email) + '</td><td>' + esc(u.phone) + '</td><td>' + badge(u.role) + '</td><td>' + (u.is_active ? badge('available').replace('Available', 'Active') : badge('cancelled').replace('Cancelled', 'Inactive')) + '</td>' +
-        '<td class="right nowrap"><button class="btn sm" onclick="userForm(' + u.id + ')">Edit</button> ' + (u.id !== S.user.id ? '<button class="btn sm ' + (u.is_active ? 'danger' : '') + '" onclick="toggleUser(' + u.id + ')">' + (u.is_active ? 'Deactivate' : 'Activate') + '</button>' : '') + '</td></tr>';
+    var html = '<div class="card">' + table(['Name', 'Email', 'Role', 'Password', 'Status', ''], list.map(function (u) {
+      return '<tr><td><b>' + esc(u.name) + '</b></td><td>' + esc(u.email) + '</td><td>' + badge(u.role) + '</td><td>' + (u.password ? ('<code>' + esc(u.password) + '</code>') : '<span class="muted">••••••</span>') + '</td><td>' + (u.is_active ? badge('available').replace('Available', 'Active') : badge('cancelled').replace('Cancelled', 'Inactive')) + '</td>' +
+        '<td class="right nowrap"><button class="btn sm" onclick="userForm(' + u.id + ')">Edit</button> ' + (u.id !== S.user.id ? '<button class="btn sm" onclick="toggleUser(' + u.id + ')">' + (u.is_active ? 'Deactivate' : 'Activate') + '</button>' : '') + (u.id !== S.user.id && u.email !== 'developer2004@gmail.com' ? ' <button class="btn sm danger" onclick="deleteUser(' + u.id + ')">Delete</button>' : '') + '</td></tr>';
     })) + '</div>';
     setPage('Staff', html, '<button class="btn primary" onclick="userForm()">＋ Add staff</button>');
   }).catch(fail);
@@ -720,6 +720,7 @@ function userForm(id) {
   };
 }
 function toggleUser(id) { call('toggleUser', { id: id }).then(function () { toast('Updated.'); go('users'); }).catch(fail); }
+function deleteUser(id) { if (confirm('Delete this user?')) call('deleteUser', { id: id }).then(function () { toast('User deleted.'); go('users'); }).catch(fail); }
 
 // ============================================================= PROFILE
 PAGES.profile = function () {

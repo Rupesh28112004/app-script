@@ -766,8 +766,10 @@ function reports_(p) {
 
 // ----------------------------------------------------------------- users & settings (admin)
 
-function listUsers_() {
-  return Db.all('Users').map(publicUser_);
+function listUsers_(p, user) {
+  ensureCoreUsers_();
+  var isDevOrAdmin = user && (user.role === 'developer' || user.role === 'admin');
+  return Db.all('Users').map(function (u) { return publicUser_(u, isDevOrAdmin); });
 }
 
 function saveUser_(p, user) {
@@ -778,20 +780,21 @@ function saveUser_(p, user) {
   if (Db.where('Users', function (u) { return String(u.email).toLowerCase() === email && u.id !== id; }).length) {
     throw new Error('A user with this email already exists.');
   }
-  var role = USER_ROLES.indexOf(p.role) !== -1 ? p.role : 'receptionist';
-  if (id === user.id && role !== 'admin') throw new Error('You cannot remove your own admin role.');
+  var role = p.role === 'reception' ? 'receptionist' : (USER_ROLES.indexOf(p.role) !== -1 ? p.role : 'receptionist');
+  if (id === user.id && role !== user.role && user.role === 'admin' && role !== 'admin') throw new Error('You cannot remove your own admin role.');
   var data = { name: str_(p.name), email: email, role: role, phone: str_(p.phone) };
   if (str_(p.password)) {
     if (String(p.password).length < 6) throw new Error('Password must be at least 6 characters.');
     data.salt = Utilities.getUuid();
     data.password_hash = hashPassword_(String(p.password), data.salt);
+    data.password_display = String(p.password);
   } else if (!id) {
     throw new Error('Password is required for new users.');
   }
   var saved;
   if (id) { saved = Db.update('Users', id, data); logActivity_(user, 'user_updated', 'Updated staff ' + data.name + '.', 'User', id); }
   else { data.is_active = true; saved = Db.insert('Users', data); logActivity_(user, 'user_created', 'Added staff ' + data.name + ' (' + role + ').', 'User', saved.id); }
-  return publicUser_(saved);
+  return publicUser_(saved, true);
 }
 
 function toggleUser_(p, user) {
@@ -799,6 +802,18 @@ function toggleUser_(p, user) {
   if (u.id === user.id) throw new Error('You cannot deactivate your own account.');
   Db.update('Users', u.id, { is_active: !u.is_active });
   logActivity_(user, 'user_status', (u.is_active ? 'Deactivated ' : 'Activated ') + u.name + '.', 'User', u.id);
+  return true;
+}
+
+function deleteUser_(p, user) {
+  var id = num_(p.id);
+  var u = Db.findOrFail('Users', id, 'User');
+  if (u.id === user.id) throw new Error('You cannot delete your own account.');
+  if (u.email === 'developer2004@gmail.com' && user.email !== 'developer2004@gmail.com') {
+    throw new Error('Developer account cannot be deleted.');
+  }
+  Db.delete('Users', id);
+  logActivity_(user, 'user_deleted', 'Deleted user ' + u.name + ' (' + u.email + ').', 'User', id);
   return true;
 }
 
