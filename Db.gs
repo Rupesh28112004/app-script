@@ -170,7 +170,7 @@ var Db = (function () {
       });
     }
     // Old sample name from setup() -> Hotel GRS (a name set later in Settings still wins)
-    if (out.hotel_name === 'Grand Horizon Hotel & Suites' || out.hotel_name === '' || /^\s*grs\s*hot[ae]l\s*$/i.test(out.hotel_name)) out.hotel_name = 'Hotel GRS';
+    if (out.hotel_name === 'Grand Horizon Hotel & Suites' || out.hotel_name === '' || /^\s*(grs\s*hot[ae]l|hot[ae]l\s*grs)\s*$/i.test(out.hotel_name)) out.hotel_name = 'Hotel GRS';
     return out;
   }
 

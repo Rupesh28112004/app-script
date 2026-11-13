@@ -171,15 +171,17 @@
           <div class="b-sec">Total in words</div>
           <div class="b-line b" style="border-bottom:1px solid #1c6db5"><?= words ?></div>
 
+          <? if (hasBank) { ?>
           <div class="b-sec">Bank Details</div>
           <table>
-            <tr><td class="b-line b" style="width:28%">Name</td><td class="b-line"><?= h.bank_name ?></td></tr>
+            <? if (h.bank_name) { ?><tr><td class="b-line b" style="width:28%">Name</td><td class="b-line"><?= h.bank_name ?></td></tr><? } ?>
             <tr><td class="b-line b">Acc. Name</td><td class="b-line"><?= h.hotel_name ?></td></tr>
-            <tr><td class="b-line b">Acc. Number</td><td class="b-line"><?= h.bank_account_number ?></td></tr>
-            <tr><td class="b-line b">IFSC</td><td class="b-line"><?= h.bank_ifsc ?></td></tr>
-            <tr><td class="b-line b" style="border-bottom:1px solid #1c6db5">UPI ID</td><td class="b-line" style="border-bottom:1px solid #1c6db5"><?= h.bank_upi_id ?></td></tr>
+            <? if (h.bank_account_number) { ?><tr><td class="b-line b">Acc. Number</td><td class="b-line"><?= h.bank_account_number ?></td></tr><? } ?>
+            <? if (h.bank_ifsc) { ?><tr><td class="b-line b">IFSC</td><td class="b-line"><?= h.bank_ifsc ?></td></tr><? } ?>
+            <? if (h.bank_upi_id) { ?><tr><td class="b-line b" style="border-bottom:1px solid #1c6db5">UPI ID</td><td class="b-line" style="border-bottom:1px solid #1c6db5"><?= h.bank_upi_id ?></td></tr><? } ?>
           </table>
 
+          <? } ?>
           <div class="b-sec">Terms &amp; Conditions</div>
           <div class="b-terms">
             <? if (h.terms_and_conditions) { h.terms_and_conditions.split(/\r?\n/).forEach(function (line, i) { ?><?!= i ? '<br>' : '' ?><?= line ?><? }); } else { ?>-<? } ?>

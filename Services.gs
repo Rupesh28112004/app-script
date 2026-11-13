@@ -512,6 +512,17 @@ function getInvoice_(p) {
   var inv = Db.findOrFail('Invoices', p.id, 'Invoice');
   try { inv.hotel = JSON.parse(inv.hotel_snapshot || '{}'); } catch (e) { inv.hotel = {}; }
   delete inv.hotel_snapshot;
+  if (inv.hotel) {
+    if (inv.hotel.bank_account_number === '9090909090' || inv.hotel.bank_ifsc === 'HDFC0000123') {
+      delete inv.hotel.bank_name;
+      delete inv.hotel.bank_account_number;
+      delete inv.hotel.bank_ifsc;
+      delete inv.hotel.bank_upi_id;
+    }
+    if (!inv.hotel.hotel_name || /^\s*(grs\s*hot[ae]l|hot[ae]l\s*grs|grand horizon hotel & suites)\s*$/i.test(inv.hotel.hotel_name)) {
+      inv.hotel.hotel_name = 'Hotel GRS';
+    }
+  }
   inv.guest = Db.find('Guests', inv.guest_id) || {};
   inv.booking = inv.booking_id ? enrichBookings_([Db.find('Bookings', inv.booking_id)].filter(Boolean))[0] || null : null;
   inv.items = Db.where('InvoiceItems', function (i) { return i.invoice_id === inv.id; });
@@ -581,9 +592,11 @@ function invoiceHtml_(p) {
   // Current hotel settings win; the snapshot taken when the invoice was created is the fallback.
   var pick = function (k) { return str_(s[k]) || str_(snap[k]); };
   var h = {};
-  ['hotel_name', 'address', 'city', 'state', 'country', 'postal_code', 'phone', 'email', 'gstin', 'bank_name',
-    'bank_account_number', 'bank_ifsc', 'bank_upi_id', 'terms_and_conditions'].forEach(function (k) { h[k] = pick(k); });
-  if (!h.hotel_name || /^\s*grs\s*hot[ae]l\s*$/i.test(h.hotel_name) || h.hotel_name === 'Grand Horizon Hotel & Suites') h.hotel_name = 'Hotel GRS';
+  ['hotel_name', 'address', 'city', 'state', 'country', 'postal_code', 'phone', 'email', 'gstin', 'terms_and_conditions'].forEach(function (k) { h[k] = pick(k); });
+  var bankKeys = ['bank_name', 'bank_account_number', 'bank_ifsc', 'bank_upi_id'];
+  if (!h.hotel_name || /^\s*(grs\s*hot[ae]l|hot[ae]l\s*grs|grand horizon hotel & suites)\s*$/i.test(h.hotel_name)) h.hotel_name = 'Hotel GRS';
+  var hasBank = bankKeys.some(function (k) { return str_(s[k]).length > 0; });
+  bankKeys.forEach(function (k) { h[k] = hasBank ? str_(s[k]) : ''; });
   h.full_address = [h.address, h.city, (h.state + (h.postal_code ? ' - ' + h.postal_code : '')).trim(), h.country]
     .filter(function (x) { return x; }).join(', ');
 
@@ -595,6 +608,7 @@ function invoiceHtml_(p) {
   var t = HtmlService.createTemplateFromFile('InvoicePrint');
   t.inv = inv;
   t.h = h;
+  t.hasBank = hasBank;
   t.g = inv.guest || {};
   // "XXXXXXXX8841" -> "•••• •••• 8841"
   t.idMasked = String(t.g.id_number_masked || '').replace(/^(X+)(.{1,4})$/, function (m, xs, last) {
