@@ -45,10 +45,10 @@ var ROUTES = {
   getSettings:      { fn: function () { var s = Db.getSettings(); s.logo = Db.getAsset('logo'); s.signature = Db.getAsset('signature'); return s; }, roles: ADMIN },
   saveSettings:     { fn: saveSettings_, roles: ADMIN, write: true },
   saveAsset:        { fn: saveAsset_, roles: ADMIN, write: true },
-  listUsers:        { fn: listUsers_, roles: DEV },
-  saveUser:         { fn: saveUser_, roles: DEV, write: true },
-  toggleUser:       { fn: toggleUser_, roles: DEV, write: true },
-  deleteUser:       { fn: deleteUser_, roles: DEV, write: true }
+  listUsers:        { fn: listUsers_, roles: ADMIN },
+  saveUser:         { fn: saveUser_, roles: ADMIN, write: true },
+  toggleUser:       { fn: toggleUser_, roles: ADMIN, write: true },
+  deleteUser:       { fn: deleteUser_, roles: ADMIN, write: true }
 };
 
 function doGet() {

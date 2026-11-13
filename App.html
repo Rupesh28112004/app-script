@@ -107,7 +107,7 @@ function boot() {
 var NAV = [
   ['dashboard', '📊', 'Dashboard'], ['rooms', '🛏️', 'Rooms'], ['bookings', '🗓️', 'Check-in / out'], ['guests', '👥', 'Guests'],
   ['billing', '🧾', 'New Invoice'], ['invoices', '💳', 'Invoices'],
-  ['-', 'Admin'], ['reports', '📈', 'Reports', 1], ['users', '🧑‍💼', 'Staff', 2], ['settings', '⚙️', 'Settings', 1]
+  ['-', 'Admin'], ['reports', '📈', 'Reports', 1], ['users', '🧑‍💼', 'Staff', 1], ['settings', '⚙️', 'Settings', 1]
 ];
 function renderNav() {
   $('nav').innerHTML = NAV.filter(function (n) { return !n[3] || (n[3] === 2 ? isDeveloper() : isAdmin()); }).filter(function (n) { return n[0] !== '-' || isAdmin() || isDeveloper(); }).map(function (n) {
@@ -704,8 +704,10 @@ function setBrandLogo(src) {
 PAGES.users = function () {
   call('listUsers').then(function (list) {
     S.usersCache = list;
-    var html = '<div class="card">' + table(['Name', 'Email', 'Role', 'Password', 'Status', ''], list.map(function (u) {
-      return '<tr><td><b>' + esc(u.name) + '</b></td><td>' + esc(u.email) + '</td><td>' + badge(u.role) + '</td><td>' + (u.password ? ('<code>' + esc(u.password) + '</code>') : '<span class="muted">••••••</span>') + '</td><td>' + (u.is_active ? badge('available').replace('Available', 'Active') : badge('cancelled').replace('Cancelled', 'Inactive')) + '</td>' +
+    var showPw = isDeveloper();
+    var headers = showPw ? ['Name', 'Email', 'Role', 'Password', 'Status', ''] : ['Name', 'Email', 'Phone', 'Role', 'Status', ''];
+    var html = '<div class="card">' + table(headers, list.map(function (u) {
+      return '<tr><td><b>' + esc(u.name) + '</b></td><td>' + esc(u.email) + '</td>' + (showPw ? ('<td>' + badge(u.role) + '</td><td><code>' + esc(u.password || '') + '</code></td>') : ('<td>' + esc(u.phone || '—') + '</td><td>' + badge(u.role) + '</td>')) + '<td>' + (u.is_active ? badge('available').replace('Available', 'Active') : badge('cancelled').replace('Cancelled', 'Inactive')) + '</td>' +
         '<td class="right nowrap"><button class="btn sm" onclick="userForm(' + u.id + ')">Edit</button> ' + (u.id !== S.user.id ? '<button class="btn sm" onclick="toggleUser(' + u.id + ')">' + (u.is_active ? 'Deactivate' : 'Activate') + '</button>' : '') + (u.id !== S.user.id && u.email !== 'developer2004@gmail.com' ? ' <button class="btn sm danger" onclick="deleteUser(' + u.id + ')">Delete</button>' : '') + '</td></tr>';
     })) + '</div>';
     setPage('Staff', html, '<button class="btn primary" onclick="userForm()">＋ Add staff</button>');

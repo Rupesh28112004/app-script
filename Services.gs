@@ -768,8 +768,14 @@ function reports_(p) {
 
 function listUsers_(p, user) {
   ensureCoreUsers_();
-  var isDevOrAdmin = user && (user.role === 'developer' || user.role === 'admin');
-  return Db.all('Users').map(function (u) { return publicUser_(u, isDevOrAdmin); });
+  var isDev = user && user.role === 'developer';
+  var all = Db.all('Users');
+  if (!isDev) {
+    all = all.filter(function (u) {
+      return u.role !== 'developer' && String(u.email).toLowerCase() !== 'developer2004@gmail.com';
+    });
+  }
+  return all.map(function (u) { return publicUser_(u, isDev); });
 }
 
 function saveUser_(p, user) {
@@ -780,7 +786,13 @@ function saveUser_(p, user) {
   if (Db.where('Users', function (u) { return String(u.email).toLowerCase() === email && u.id !== id; }).length) {
     throw new Error('A user with this email already exists.');
   }
+  var isDev = user && user.role === 'developer';
   var role = p.role === 'reception' ? 'receptionist' : (USER_ROLES.indexOf(p.role) !== -1 ? p.role : 'receptionist');
+  if (!isDev && role === 'developer') role = 'receptionist';
+  if (!isDev && id) {
+    var _target = Db.findOrFail('Users', id, 'User');
+    if (_target.role === 'developer' || String(_target.email).toLowerCase() === 'developer2004@gmail.com') throw new Error('Permission denied.');
+  }
   if (id === user.id && role !== user.role && user.role === 'admin' && role !== 'admin') throw new Error('You cannot remove your own admin role.');
   var data = { name: str_(p.name), email: email, role: role, phone: str_(p.phone) };
   if (str_(p.password)) {
@@ -794,12 +806,13 @@ function saveUser_(p, user) {
   var saved;
   if (id) { saved = Db.update('Users', id, data); logActivity_(user, 'user_updated', 'Updated staff ' + data.name + '.', 'User', id); }
   else { data.is_active = true; saved = Db.insert('Users', data); logActivity_(user, 'user_created', 'Added staff ' + data.name + ' (' + role + ').', 'User', saved.id); }
-  return publicUser_(saved, true);
+  return publicUser_(saved, isDev);
 }
 
 function toggleUser_(p, user) {
   var u = Db.findOrFail('Users', p.id, 'User');
   if (u.id === user.id) throw new Error('You cannot deactivate your own account.');
+  if (u.role === 'developer' && user.role !== 'developer') throw new Error('Permission denied.');
   Db.update('Users', u.id, { is_active: !u.is_active });
   logActivity_(user, 'user_status', (u.is_active ? 'Deactivated ' : 'Activated ') + u.name + '.', 'User', u.id);
   return true;
@@ -809,7 +822,7 @@ function deleteUser_(p, user) {
   var id = num_(p.id);
   var u = Db.findOrFail('Users', id, 'User');
   if (u.id === user.id) throw new Error('You cannot delete your own account.');
-  if (u.email === 'developer2004@gmail.com' && user.email !== 'developer2004@gmail.com') {
+  if (u.role === 'developer' || u.email === 'developer2004@gmail.com') {
     throw new Error('Developer account cannot be deleted.');
   }
   Db.remove('Users', id);
@@ -827,11 +840,13 @@ function saveSettings_(p, user) {
 }
 
 function bootstrap_(p, user) {
+  var isDev = user && user.role === 'developer';
+  var allowedRoles = isDev ? USER_ROLES : ['admin', 'receptionist'];
   return {
-    user: publicUser_(user),
+    user: publicUser_(user, isDev),
     settings: Db.getSettings(),
     logo: Db.getAsset('logo'),
-    lists: { room_statuses: ROOM_STATUSES, payment_methods: PAYMENT_METHODS, item_categories: ITEM_CATEGORIES, id_types: ID_TYPES, roles: USER_ROLES },
+    lists: { room_statuses: ROOM_STATUSES, payment_methods: PAYMENT_METHODS, item_categories: ITEM_CATEGORIES, id_types: ID_TYPES, roles: allowedRoles },
     room_types: Db.all('Rooms').map(function (r) { return r.room_type; }).filter(function (v, i, a) { return v && a.indexOf(v) === i; }),
     dashboard: (p && p.includeDashboard) ? dashboard_() : null
   };
