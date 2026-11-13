@@ -328,6 +328,7 @@ function cancelBooking_(p, user) {
 }
 
 function deleteBookings_(p, user) {
+  if (!user || user.role !== 'developer') throw new Error('Permission denied. Only developer can delete bookings.');
   var rawIds = Array.isArray(p.ids) ? p.ids : (p.id ? [p.id] : []);
   var ids = rawIds.map(function (v) { return num_(v); }).filter(function (v) { return v > 0; });
   if (!ids.length) throw new Error('Select at least one booking to delete.');
@@ -411,6 +412,32 @@ function billingPrefill_(p) {
   return out;
 }
 
+function getNextInvoiceNumber_(settings) {
+  var prefix = settings.invoice_prefix || 'INV-';
+  var existing = {};
+  var minNum = null;
+
+  Db.all('Invoices').forEach(function (i) {
+    existing[i.invoice_number] = true;
+    var match = String(i.invoice_number).match(/(\d+)$/);
+    if (match) {
+      var val = parseInt(match[1], 10);
+      if (minNum === null || val < minNum) minNum = val;
+    }
+  });
+
+  var settingNum = parseInt(settings.next_invoice_number, 10) || 1001;
+  var baseStart = (minNum !== null && minNum < 100) || (settingNum < 100) ? 1 : 1001;
+  if (minNum !== null && minNum < baseStart) baseStart = minNum;
+  if (settingNum < baseStart) baseStart = settingNum;
+
+  var n = baseStart;
+  while (existing[prefix + n]) {
+    n++;
+  }
+  return n;
+}
+
 function createInvoice_(p, user) {
   var settings = Db.getSettings();
   var booking = p.booking_id ? Db.findOrFail('Bookings', p.booking_id, 'Booking') : null;
@@ -432,7 +459,7 @@ function createInvoice_(p, user) {
 
   // Sequential invoice number from settings
   var prefix = settings.invoice_prefix || 'INV-';
-  var n = Math.max(1, parseInt(settings.next_invoice_number, 10) || 1001);
+  var n = getNextInvoiceNumber_(settings);
   var existing = {};
   Db.all('Invoices').forEach(function (i) { existing[i.invoice_number] = true; });
   while (existing[prefix + n]) n++;
@@ -532,6 +559,38 @@ function getInvoice_(p) {
     return pm;
   });
   return inv;
+}
+
+function deleteInvoices_(p, user) {
+  if (!user || user.role !== 'developer') throw new Error('Permission denied. Only developer can delete invoices.');
+  var rawIds = Array.isArray(p.ids) ? p.ids : (p.id ? [p.id] : []);
+  var ids = rawIds.map(function (v) { return num_(v); }).filter(function (v) { return v > 0; });
+  if (!ids.length) throw new Error('Select at least one invoice to delete.');
+
+  var deleted = 0;
+  ids.forEach(function (id) {
+    var inv = Db.find('Invoices', id);
+    if (!inv) return;
+
+    Db.where('InvoiceItems', function (item) { return item.invoice_id === inv.id; }).forEach(function (item) {
+      Db.remove('InvoiceItems', item.id);
+    });
+
+    Db.where('Payments', function (pm) { return pm.invoice_id === inv.id; }).forEach(function (pm) {
+      Db.remove('Payments', pm.id);
+    });
+
+    if (Db.remove('Invoices', inv.id)) deleted++;
+  });
+
+  var settings = Db.getSettings();
+  var nextNum = getNextInvoiceNumber_(settings);
+  Db.saveSettings({ next_invoice_number: String(nextNum) });
+
+  if (deleted > 0) {
+    logActivity_(user, 'invoices_deleted', 'Deleted ' + deleted + ' invoice(s).');
+  }
+  return { deleted: deleted, next_invoice_number: nextNum };
 }
 
 /** 1234567.5 -> "12,34,567.50" (Indian digit grouping). */

@@ -31,7 +31,8 @@ var ROUTES = {
   checkIn:          { fn: checkIn_, roles: STAFF, write: true },
   checkOut:         { fn: checkOut_, roles: STAFF, write: true },
   cancelBooking:    { fn: cancelBooking_, roles: STAFF, write: true },
-  deleteBookings:   { fn: deleteBookings_, roles: STAFF, write: true },
+  deleteBookings:   { fn: deleteBookings_, roles: DEV, write: true },
+  deleteInvoices:   { fn: deleteInvoices_, roles: DEV, write: true },
 
   billingPrefill:   { fn: billingPrefill_, roles: STAFF },
   createInvoice:    { fn: createInvoice_, roles: STAFF, write: true },
