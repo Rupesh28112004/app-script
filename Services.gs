@@ -643,7 +643,10 @@ function saveAsset_(p, user) {
 function invoicePdf_(p) {
   var inv = Db.findOrFail('Invoices', p.id, 'Invoice');
   var blob = Utilities.newBlob(invoiceHtml_(p), 'text/html', 'invoice.html').getAs('application/pdf');
-  return { filename: inv.invoice_number + '.pdf', base64: Utilities.base64Encode(blob.getBytes()) };
+  var num = String(inv.invoice_number || '').trim();
+  var fname = /^HOTEL-GRS-/i.test(num) ? num : ('HOTEL-GRS-' + num);
+  if (!/\.pdf$/i.test(fname)) fname += '.pdf';
+  return { filename: fname, base64: Utilities.base64Encode(blob.getBytes()) };
 }
 
 // ----------------------------------------------------------------- dashboard & reports

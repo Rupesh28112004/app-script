@@ -572,7 +572,8 @@ function downloadPdf(id) {
     var bin = atob(r.base64), bytes = new Uint8Array(bin.length);
     for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
     var url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
-    var a = document.createElement('a'); a.href = url; a.download = r.filename; document.body.appendChild(a); a.click(); a.remove();
+    var fname = (r && r.filename) ? r.filename : ('HOTEL-GRS-INV-' + id + '.pdf');
+    var a = document.createElement('a'); a.href = url; a.download = fname; document.body.appendChild(a); a.click(); a.remove();
     setTimeout(function () { URL.revokeObjectURL(url); }, 5000);
   }).catch(fail);
 }
