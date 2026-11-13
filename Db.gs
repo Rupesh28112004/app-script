@@ -236,7 +236,7 @@ var Db = (function () {
     getAsset: getAsset, saveAsset: saveAsset, deleteAsset: deleteAsset,
     ss: ss, sheet: sheet, tz: tz, nowStr: nowStr,
     all: all, where: where, find: find, findOrFail: findOrFail,
-    insert: insert, update: update, remove: remove,
+    insert: insert, update: update, remove: remove, delete: remove,
     getSettings: getSettings, saveSettings: saveSettings
   };
 })();

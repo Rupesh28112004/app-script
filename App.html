@@ -107,10 +107,10 @@ function boot() {
 var NAV = [
   ['dashboard', '📊', 'Dashboard'], ['rooms', '🛏️', 'Rooms'], ['bookings', '🗓️', 'Check-in / out'], ['guests', '👥', 'Guests'],
   ['billing', '🧾', 'New Invoice'], ['invoices', '💳', 'Invoices'],
-  ['-', 'Admin'], ['reports', '📈', 'Reports', 1], ['users', '🧑‍💼', 'Staff', 1], ['settings', '⚙️', 'Settings', 1]
+  ['-', 'Admin'], ['reports', '📈', 'Reports', 1], ['users', '🧑‍💼', 'Staff', 2], ['settings', '⚙️', 'Settings', 1]
 ];
 function renderNav() {
-  $('nav').innerHTML = NAV.filter(function (n) { return !n[3] || isAdmin(); }).filter(function (n) { return n[0] !== '-' || isAdmin(); }).map(function (n) {
+  $('nav').innerHTML = NAV.filter(function (n) { return !n[3] || (n[3] === 2 ? isDeveloper() : isAdmin()); }).filter(function (n) { return n[0] !== '-' || isAdmin() || isDeveloper(); }).map(function (n) {
     var sepTitle = isDeveloper() ? 'Developer & Admin' : n[1];
     return n[0] === '-' ? '<div class="sep">' + sepTitle + '</div>' : '<a data-r="' + n[0] + '" onclick="go(\'' + n[0] + '\')"><span>' + n[1] + '</span>' + n[2] + '</a>';
   }).join('');

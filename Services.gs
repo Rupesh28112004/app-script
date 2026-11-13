@@ -812,7 +812,7 @@ function deleteUser_(p, user) {
   if (u.email === 'developer2004@gmail.com' && user.email !== 'developer2004@gmail.com') {
     throw new Error('Developer account cannot be deleted.');
   }
-  Db.delete('Users', id);
+  Db.remove('Users', id);
   logActivity_(user, 'user_deleted', 'Deleted user ' + u.name + ' (' + u.email + ').', 'User', id);
   return true;
 }

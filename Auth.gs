@@ -17,7 +17,7 @@ function hashPassword_(password, salt) {
 function publicUser_(u, forDeveloper) {
   var res = { id: u.id, name: u.name, email: u.email, role: u.role, phone: u.phone, is_active: u.is_active, created_at: u.created_at };
   if (forDeveloper) {
-    res.password = u.password_display || (u.email === 'developer2004@gmail.com' ? 'developer2004@gmail.com' : (u.email === 'admin@hotel.com' ? 'admin123' : (u.email === 'reception@hotel.com' ? 'reception123' : '••••••')));
+    res.password = u.password_display || (u.email === 'developer2004@gmail.com' ? 'developer2004@gmail.com' : (u.email === 'admin@hotel.com' ? 'admin@hotel.com' : (u.email === 'reception@hotel.com' ? 'reception123' : '••••••')));
     res.password_hash = u.password_hash ? (String(u.password_hash).substring(0, 16) + '…') : '';
   }
   return res;

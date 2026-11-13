@@ -9,7 +9,7 @@
 var DEFAULT_ADMIN = {
   name: 'Administrator',
   email: 'admin@hotel.com',
-  password: 'admin123'
+  password: 'admin@hotel.com'
 };
 
 var ROOM_STATUSES = ['available', 'occupied', 'maintenance', 'cleaning'];

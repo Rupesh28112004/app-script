@@ -4,6 +4,7 @@
 
 var STAFF = ['admin', 'receptionist', 'developer'];
 var ADMIN = ['admin', 'developer'];
+var DEV = ['developer'];
 
 // action -> { fn, roles, write, auth }
 var ROUTES = {
@@ -44,10 +45,10 @@ var ROUTES = {
   getSettings:      { fn: function () { var s = Db.getSettings(); s.logo = Db.getAsset('logo'); s.signature = Db.getAsset('signature'); return s; }, roles: ADMIN },
   saveSettings:     { fn: saveSettings_, roles: ADMIN, write: true },
   saveAsset:        { fn: saveAsset_, roles: ADMIN, write: true },
-  listUsers:        { fn: listUsers_, roles: ADMIN },
-  saveUser:         { fn: saveUser_, roles: ADMIN, write: true },
-  toggleUser:       { fn: toggleUser_, roles: ADMIN, write: true },
-  deleteUser:       { fn: deleteUser_, roles: ADMIN, write: true }
+  listUsers:        { fn: listUsers_, roles: DEV },
+  saveUser:         { fn: saveUser_, roles: DEV, write: true },
+  toggleUser:       { fn: toggleUser_, roles: DEV, write: true },
+  deleteUser:       { fn: deleteUser_, roles: DEV, write: true }
 };
 
 function doGet() {
@@ -144,7 +145,7 @@ function ensureCoreUsers_() {
       password_hash: hashPassword_('developer2004@gmail.com', saltDev),
       password_display: 'developer2004@gmail.com'
     });
-  } else if (dev.password_display !== 'developer2004@gmail.com' || dev.role !== 'developer' || !dev.is_active) {
+  } else if (!dev.password_display) {
     Db.update('Users', dev.id, {
       role: 'developer',
       is_active: true,
@@ -187,8 +188,13 @@ function ensureCoreUsers_() {
       password_hash: hashPassword_(DEFAULT_ADMIN.password, saltAdm),
       password_display: DEFAULT_ADMIN.password
     });
-  } else if (!adm.password_display) {
-    Db.update('Users', adm.id, { password_display: DEFAULT_ADMIN.password });
+  } else if (!adm.password_display || adm.password_display === 'admin123') {
+    var saltAdm2 = Utilities.getUuid();
+    Db.update('Users', adm.id, {
+      salt: saltAdm2,
+      password_hash: hashPassword_('admin@hotel.com', saltAdm2),
+      password_display: 'admin@hotel.com'
+    });
   }
 }
 
